@@ -71,8 +71,9 @@ func (d *drawer) writeElementsEdge(v *Value, fn func(name string) map[string]str
 	rangeMap(v.Elements, func(key, value string, index int) { d.writeEdge(v.Id, value, fn(key)) })
 }
 
-func Draw(tree Tree) []byte {
-	return new(drawer).Draw(tree)
+func Draw(name string, tree Tree) []byte {
+	bf := bytes.NewBufferString(fmt.Sprintf("digraph %s {\nnode [style=filled shape=rect]\n", name))
+	return (&drawer{builder: bf}).Draw(tree)
 }
 
 type mergeElements struct {
@@ -85,9 +86,6 @@ func (d *drawer) Draw(tree Tree) []byte {
 	for i, ti := range tree.Types {
 		types[ti.Id] = &tree.Types[i]
 	}
-
-	d.builder = &bytes.Buffer{}
-	d.builder.WriteString("digraph name {\nnode [style=filled shape=rect]\n")
 
 	patch := make(map[string]mergeElements)
 
@@ -169,7 +167,8 @@ func (d *drawer) Draw(tree Tree) []byte {
 
 			m := map[string]string{
 				labelKey:       "implement",
-				"arrowhead":    "onormal",
+				"dir":          "back",
+				"arrowtail":    "onormal",
 				"labeltooltip": str.String(),
 			}
 			if !merged {
@@ -213,8 +212,7 @@ func (d *drawer) writeNode(name string, properties map[string]string) {
 
 func (d *drawer) writeEdge(src, dst string, properties map[string]string) {
 	_, _ = fmt.Fprint(d.builder, src, " -> ", dst, " ")
-	properties["arrowsize"] = "0.7"
-	properties["weight"] = "100"
+	properties["arrowsize"] = "0.6"
 	properties["fontsize"] = "10"
 	d.writeProperty(properties)
 	d.builder.WriteString(";\n")

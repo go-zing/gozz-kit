@@ -31,14 +31,13 @@ func TestParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	if !bytes.Equal(b, want) {
 		t.Fatalf("%s", b)
 	}
 }
 
 func TestDraw(t *testing.T) {
-	t.Logf("%s", Draw(Parse([]interface{}{&_T0{
+	t.Logf("%s", Draw("test", Parse([]interface{}{&_T0{
 		Field:  ptr,
 		_field: ptr,
 	}, _T0{

@@ -3,6 +3,7 @@ package ztree
 import (
 	"bytes"
 	"fmt"
+	"go/format"
 	"io"
 	"sort"
 	"strconv"
@@ -30,24 +31,24 @@ var (
 	}
 )
 
-type Drawer struct {
+type drawer struct {
 	builder *bytes.Buffer
 }
 
-func (d *Drawer) writeProperty(properties map[string]string) {
+func (d *drawer) writeProperty(properties map[string]string) {
 	d.builder.WriteRune('[')
 	writeMap(properties, "=", `"`, ` `, d.builder)
 	d.builder.WriteRune(']')
 }
 
-func (d *Drawer) writeNode(name string, properties map[string]string) {
+func (d *drawer) writeNode(name string, properties map[string]string) {
 	d.builder.WriteString(name)
 	d.builder.WriteString(" ")
 	d.writeProperty(properties)
 	d.builder.WriteString(";\n")
 }
 
-func (d *Drawer) writeEdge(src, dst string, properties map[string]string) {
+func (d *drawer) writeEdge(src, dst string, properties map[string]string) {
 	_, _ = fmt.Fprint(d.builder, src, " -> ", dst, " ")
 	properties["arrowsize"] = "0.7"
 	properties["weight"] = "100"
@@ -56,7 +57,7 @@ func (d *Drawer) writeEdge(src, dst string, properties map[string]string) {
 	d.builder.WriteString(";\n")
 }
 
-func (d *Drawer) color(kind string) string {
+func (d *drawer) color(kind string) string {
 	color, set := kindColor[kind]
 	if !set {
 		color = kindColor[""]
@@ -64,12 +65,16 @@ func (d *Drawer) color(kind string) string {
 	return color
 }
 
-func (d *Drawer) writeValueNode(max int, v *Value, typ *Type) {
+func (d *drawer) writeValueNode(max int, v *Value, typ *Type) {
 	tip := typ.Name
 	if len(typ.Name) == 0 {
 		tip = typ.String
 	} else if len(typ.Package) > 0 {
 		tip = typ.Package + "." + typ.Name
+	}
+
+	if doc := typ.Docs[""]; len(doc) > 0 {
+		tip += `\n` + doc
 	}
 
 	d.writeNode(v.Id, map[string]string{
@@ -93,7 +98,7 @@ func rangeMap(m map[string]string, fn func(key, value string, index int)) {
 	}
 }
 
-func (d *Drawer) writeElementsEdge(v *Value, fn func(name string) map[string]string) {
+func (d *drawer) writeElementsEdge(v *Value, fn func(name string) map[string]string) {
 	rangeMap(v.Elements, func(key, value string, index int) { d.writeEdge(v.Id, value, fn(key)) })
 }
 
@@ -102,10 +107,14 @@ type mergeElements struct {
 	Id  string
 }
 
-func (d *Drawer) Draw(tree Tree) []byte {
-	tm := make(map[string]*Type)
+func Draw(tree Tree) []byte {
+	return new(drawer).Draw(tree)
+}
+
+func (d *drawer) Draw(tree Tree) []byte {
+	types := make(map[string]*Type)
 	for i, ti := range tree.Types {
-		tm[ti.Id] = &tree.Types[i]
+		types[ti.Id] = &tree.Types[i]
 	}
 
 	d.builder = &bytes.Buffer{}
@@ -122,7 +131,7 @@ func (d *Drawer) Draw(tree Tree) []byte {
 
 	for index := range tree.Values {
 		v := &tree.Values[index]
-		typ := tm[v.Type]
+		typ := types[v.Type]
 
 		elements, merged := patch[v.Id]
 		if !merged || elements.Id == v.Id {
@@ -137,7 +146,7 @@ func (d *Drawer) Draw(tree Tree) []byte {
 		switch typ.Kind {
 		case "map", "slice", "array":
 			le := len(v.Elements)
-			if et := tm[typ.Elements[""]]; et != nil && et.Kind == "interface" && le > 1 {
+			if et := types[typ.Elements[""]]; et != nil && et.Kind == "interface" && le > 1 {
 				for key, element := range v.Elements {
 					if key == "0" {
 						d.writeEdge(v.Id, element, map[string]string{
@@ -156,12 +165,29 @@ func (d *Drawer) Draw(tree Tree) []byte {
 				})
 			}
 		case "struct":
+			str := &bytes.Buffer{}
+			_, _ = fmt.Fprintf(str, "type %s struct {\n", typ.Name)
+			rangeMap(typ.Elements, func(key, value string, index int) {
+				if typ.Anonymous[key] {
+					_, _ = fmt.Fprintf(str, "%s\n", types[value].String)
+				} else {
+					_, _ = fmt.Fprintf(str, "%s %s\n", key, types[value].String)
+				}
+			})
+			_, _ = fmt.Fprintf(str, "}")
+			b, _ := format.Source(str.Bytes())
+			define := strconv.Quote(strings.Replace(string(b), "\t", "    ", -1))
+
 			_, _ = fmt.Fprintf(d.builder, "subgraph cluster_%s {\n", v.Id)
+			_, _ = fmt.Fprintf(d.builder, "tooltip=%s;\n", define)
 			_, _ = fmt.Fprintln(d.builder, "style=dotted;")
 			_, _ = fmt.Fprintln(d.builder, `bgcolor="#f2fff2";`)
 			_, _ = fmt.Fprintln(d.builder, `margin="0,0";`)
 			d.writeElementsEdge(v, func(name string) map[string]string {
 				tip := name
+				if doc := typ.Docs[name]; len(doc) > 0 {
+					tip = doc
+				}
 				return map[string]string{
 					labelKey:       name,
 					"arrowhead":    "open",
@@ -172,7 +198,11 @@ func (d *Drawer) Draw(tree Tree) []byte {
 		case "interface":
 			str := &strings.Builder{}
 			rangeMap(typ.Elements, func(key, value string, index int) {
-				str.WriteString(strings.Replace(tm[value].String, "func", "func "+key, 1))
+				str.WriteString(strings.Replace(types[value].String, "func", "func "+key, 1))
+				if doc := typ.Docs[key]; len(doc) > 0 {
+					str.WriteString(`\n`)
+					str.WriteString(doc)
+				}
 				if index != len(typ.Elements)-1 {
 					str.WriteString(`\n`)
 				}

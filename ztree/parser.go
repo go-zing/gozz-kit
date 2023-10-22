@@ -21,13 +21,14 @@ type (
 	}
 
 	Type struct {
-		Id       string            `json:"id"`
-		Kind     string            `json:"kind"`
-		Package  string            `json:"package"`
-		Name     string            `json:"name"`
-		String   string            `json:"string"`
-		Elements map[string]string `json:"elements"`
-		Docs     map[string]string `json:"docs"`
+		Id        string            `json:"id"`
+		Kind      string            `json:"kind"`
+		Package   string            `json:"package"`
+		Name      string            `json:"name"`
+		String    string            `json:"string"`
+		Elements  map[string]string `json:"elements"`
+		Anonymous map[string]bool   `json:"anonymous"`
+		Docs      map[string]string `json:"docs"`
 	}
 
 	Tree struct {
@@ -46,10 +47,14 @@ type parser struct {
 // +zz:option
 type Option struct {
 	Unexported bool
+	DocFunc    func(p reflect.Type, field string) string
 }
 
 func Parse(v interface{}, opts ...func(*Option)) (tree Tree) {
-	p := &parser{}
+	p := &parser{Option: Option{
+		Unexported: false,
+		DocFunc:    func(p reflect.Type, field string) string { return "" },
+	}}
 	p.Option.applyOptions(opts...)
 	p.ParseValues(reflect.ValueOf(v))
 
@@ -95,19 +100,22 @@ func (p *parser) ParseTypes(rt reflect.Type) (typ *Type) {
 		return typ
 	}
 	typ = &Type{
-		Id:       strconv.Itoa(len(p.types)),
-		Kind:     rt.Kind().String(),
-		Package:  rt.PkgPath(),
-		Name:     rt.Name(),
-		String:   strings.Replace(rt.String(), "interface {", "interface{", -1),
-		Elements: make(map[string]string),
-		Docs:     make(map[string]string),
+		Id:        strconv.Itoa(len(p.types)),
+		Kind:      rt.Kind().String(),
+		Package:   rt.PkgPath(),
+		Name:      rt.Name(),
+		String:    strings.Replace(rt.String(), "interface {", "interface{", -1),
+		Elements:  make(map[string]string),
+		Anonymous: make(map[string]bool),
+		Docs:      make(map[string]string),
 	}
 
 	if p.types == nil {
 		p.types = make(map[reflect.Type]*Type)
 	}
 	p.types[rt] = typ
+
+	typ.Docs[""] = p.Option.DocFunc(rt, "")
 
 	switch rt.Kind() {
 	case reflect.Map, reflect.Slice, reflect.Array:
@@ -117,15 +125,19 @@ func (p *parser) ParseTypes(rt reflect.Type) (typ *Type) {
 		n := rt.NumMethod()
 		for i := 0; i < n; i++ {
 			vi := rt.Method(i)
+			typ.Docs[vi.Name] = p.Option.DocFunc(rt, vi.Name)
 			typ.Elements[vi.Name] = p.ParseTypes(vi.Type).Id
 		}
 
 	case reflect.Struct:
 		n := rt.NumField()
-
 		for i := 0; i < n; i++ {
-			if vi := rt.Field(i); vi.Anonymous || p.Option.Unexported || len(vi.PkgPath) == 0 {
-				typ.Elements[vi.Name] = p.ParseTypes(vi.Type).Id
+			if ti := rt.Field(i); ti.Anonymous || p.Option.Unexported || len(ti.PkgPath) == 0 {
+				typ.Docs[ti.Name] = p.Option.DocFunc(rt, ti.Name)
+				if ti.Anonymous {
+					typ.Anonymous[ti.Name] = ti.Anonymous
+				}
+				typ.Elements[ti.Name] = p.ParseTypes(ti.Type).Id
 			}
 		}
 	}

@@ -2,7 +2,9 @@
 
 package ztree
 
-import ()
+import (
+	"reflect"
+)
 
 // apply functional options for Option
 func (o *Option) applyOptions(opts ...func(*Option)) {
@@ -12,3 +14,7 @@ func (o *Option) applyOptions(opts ...func(*Option)) {
 }
 
 func WithUnexported(v bool) func(*Option) { return func(o *Option) { o.Unexported = v } }
+
+func WithDocFunc(v func(p reflect.Type, field string) string) func(*Option) {
+	return func(o *Option) { o.DocFunc = v }
+}

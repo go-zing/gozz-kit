@@ -1,0 +1,202 @@
+package ztree
+
+import (
+	"fmt"
+	"reflect"
+	"sort"
+	"strconv"
+	"strings"
+	"unsafe"
+)
+
+//go:generate gozz run -p "option" -p "tag" .
+
+// +zz:tag:json:{{ snake .FieldName }}
+type (
+	Value struct {
+		Id       string            `json:"id"`
+		Type     string            `json:"type"`
+		Referred int               `json:"referred"`
+		Elements map[string]string `json:"elements"`
+	}
+
+	Type struct {
+		Id       string            `json:"id"`
+		Kind     string            `json:"kind"`
+		Package  string            `json:"package"`
+		Name     string            `json:"name"`
+		String   string            `json:"string"`
+		Elements map[string]string `json:"elements"`
+		Docs     map[string]string `json:"docs"`
+	}
+
+	Tree struct {
+		Values []Value `json:"values"`
+		Types  []Type  `json:"types"`
+	}
+)
+
+type parser struct {
+	Option Option
+
+	types  map[reflect.Type]*Type
+	values map[reflect.Value]*Value
+}
+
+// +zz:option
+type Option struct {
+	Unexported bool
+}
+
+func Parse(v interface{}, opts ...func(*Option)) (tree Tree) {
+	p := &parser{}
+	p.Option.applyOptions(opts...)
+	p.ParseValues(reflect.ValueOf(v))
+
+	tks := make([]reflect.Type, 0)
+	for k := range p.types {
+		tks = append(tks, k)
+	}
+	sort.Slice(tks, func(i, j int) bool {
+		i, _ = strconv.Atoi(p.types[tks[i]].Id)
+		j, _ = strconv.Atoi(p.types[tks[j]].Id)
+		return i < j
+	})
+
+	types := make([]Type, 0, len(tks))
+	for _, key := range tks {
+		types = append(types, *p.types[key])
+	}
+
+	vks := make([]reflect.Value, 0)
+	for k := range p.values {
+		vks = append(vks, k)
+	}
+	sort.Slice(vks, func(i, j int) bool {
+		i, _ = strconv.Atoi(p.values[vks[i]].Id)
+		j, _ = strconv.Atoi(p.values[vks[j]].Id)
+		return i < j
+	})
+	values := make([]Value, 0, len(vks))
+	for _, key := range vks {
+		values = append(values, *p.values[key])
+	}
+
+	return Tree{Values: values, Types: types}
+}
+
+func (p *parser) ParseTypes(rt reflect.Type) (typ *Type) {
+	for rt.Kind() == reflect.Ptr {
+		rt = rt.Elem()
+	}
+
+	typ, ok := p.types[rt]
+	if ok {
+		return typ
+	}
+	typ = &Type{
+		Id:       strconv.Itoa(len(p.types)),
+		Kind:     rt.Kind().String(),
+		Package:  rt.PkgPath(),
+		Name:     rt.Name(),
+		String:   strings.Replace(rt.String(), "interface {", "interface{", -1),
+		Elements: make(map[string]string),
+		Docs:     make(map[string]string),
+	}
+
+	if p.types == nil {
+		p.types = make(map[reflect.Type]*Type)
+	}
+	p.types[rt] = typ
+
+	switch rt.Kind() {
+	case reflect.Map, reflect.Slice, reflect.Array:
+		typ.Elements[""] = p.ParseTypes(rt.Elem()).Id
+
+	case reflect.Interface:
+		n := rt.NumMethod()
+		for i := 0; i < n; i++ {
+			vi := rt.Method(i)
+			typ.Elements[vi.Name] = p.ParseTypes(vi.Type).Id
+		}
+
+	case reflect.Struct:
+		n := rt.NumField()
+
+		for i := 0; i < n; i++ {
+			if vi := rt.Field(i); vi.Anonymous || p.Option.Unexported || len(vi.PkgPath) == 0 {
+				typ.Elements[vi.Name] = p.ParseTypes(vi.Type).Id
+			}
+		}
+	}
+	return
+}
+
+func getUnexportedField(field reflect.Value) reflect.Value {
+	return reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+}
+
+func (p *parser) ParseValues(rv reflect.Value) (object *Value) {
+	for rv.Kind() == reflect.Ptr && !rv.IsNil() {
+		rv = rv.Elem()
+	}
+
+	object, ok := p.values[rv]
+	if ok {
+		object.Referred += 1
+		return object
+	}
+
+	object = &Value{
+		Id:       strconv.Itoa(len(p.values)),
+		Elements: make(map[string]string),
+	}
+	if p.values == nil {
+		p.values = make(map[reflect.Value]*Value)
+	}
+	p.values[rv] = object
+
+	rt := rv.Type()
+	object.Type = p.ParseTypes(rt).Id
+
+	switch rt.Kind() {
+	case reflect.Map:
+		keys := rv.MapKeys()
+		object.Referred += len(keys)
+		sort.Slice(keys, func(i, j int) bool {
+			return fmt.Sprintf("%v", keys[i].Interface()) < fmt.Sprintf("%v", keys[j].Interface())
+		})
+		for i, key := range keys {
+			object.Elements[strconv.Itoa(i)] = p.ParseValues(rv.MapIndex(key)).Id
+		}
+
+	case reflect.Slice, reflect.Array:
+		l := rv.Len()
+		object.Referred += l
+		for i := 0; i < l; i++ {
+			object.Elements[strconv.Itoa(i)] = p.ParseValues(rv.Index(i)).Id
+		}
+
+	case reflect.Interface:
+		if !rv.IsNil() {
+			object.Elements[""] = p.ParseValues(rv.Elem()).Id
+		}
+
+	case reflect.Struct:
+		n := rv.NumField()
+		object.Referred += n
+		for i := 0; i < n; i++ {
+			ti := rt.Field(i)
+			vi := rv.Field(i)
+
+			if len(ti.PkgPath) > 0 && vi.CanAddr() {
+				vi = getUnexportedField(vi)
+			}
+
+			if ti.Anonymous || p.Option.Unexported || len(ti.PkgPath) == 0 {
+				object.Elements[ti.Name] = p.ParseValues(vi).Id
+			}
+		}
+	}
+	return
+}

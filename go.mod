@@ -1,3 +1,3 @@
 module github.com/go-zing/gozz-kit
 
-go 1.17
+go 1.16

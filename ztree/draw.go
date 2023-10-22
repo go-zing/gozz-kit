@@ -10,15 +10,6 @@ import (
 	"strings"
 )
 
-func writeMap(kv map[string]string, sep, wrap, join string, writer io.Writer) {
-	rangeMap(kv, func(key, value string, i int) {
-		_, _ = fmt.Fprint(writer, key, sep, wrap, value, wrap)
-		if i != len(kv)-1 {
-			_, _ = fmt.Fprintf(writer, join)
-		}
-	})
-}
-
 var (
 	kindColor = map[string]string{
 		"interface": "#A6E7FF",
@@ -33,28 +24,6 @@ var (
 
 type drawer struct {
 	builder *bytes.Buffer
-}
-
-func (d *drawer) writeProperty(properties map[string]string) {
-	d.builder.WriteRune('[')
-	writeMap(properties, "=", `"`, ` `, d.builder)
-	d.builder.WriteRune(']')
-}
-
-func (d *drawer) writeNode(name string, properties map[string]string) {
-	d.builder.WriteString(name)
-	d.builder.WriteString(" ")
-	d.writeProperty(properties)
-	d.builder.WriteString(";\n")
-}
-
-func (d *drawer) writeEdge(src, dst string, properties map[string]string) {
-	_, _ = fmt.Fprint(d.builder, src, " -> ", dst, " ")
-	properties["arrowsize"] = "0.7"
-	properties["weight"] = "100"
-	properties["fontsize"] = "10"
-	d.writeProperty(properties)
-	d.builder.WriteString(";\n")
 }
 
 func (d *drawer) color(kind string) string {
@@ -102,13 +71,13 @@ func (d *drawer) writeElementsEdge(v *Value, fn func(name string) map[string]str
 	rangeMap(v.Elements, func(key, value string, index int) { d.writeEdge(v.Id, value, fn(key)) })
 }
 
+func Draw(tree Tree) []byte {
+	return new(drawer).Draw(tree)
+}
+
 type mergeElements struct {
 	Len int
 	Id  string
-}
-
-func Draw(tree Tree) []byte {
-	return new(drawer).Draw(tree)
 }
 
 func (d *drawer) Draw(tree Tree) []byte {
@@ -165,28 +134,15 @@ func (d *drawer) Draw(tree Tree) []byte {
 				})
 			}
 		case "struct":
-			str := &bytes.Buffer{}
-			_, _ = fmt.Fprintf(str, "type %s struct {\n", typ.Name)
-			rangeMap(typ.Elements, func(key, value string, index int) {
-				if typ.Anonymous[key] {
-					_, _ = fmt.Fprintf(str, "%s\n", types[value].String)
-				} else {
-					_, _ = fmt.Fprintf(str, "%s %s\n", key, types[value].String)
-				}
-			})
-			_, _ = fmt.Fprintf(str, "}")
-			b, _ := format.Source(str.Bytes())
-			define := strconv.Quote(strings.Replace(string(b), "\t", "    ", -1))
-
 			_, _ = fmt.Fprintf(d.builder, "subgraph cluster_%s {\n", v.Id)
-			_, _ = fmt.Fprintf(d.builder, "tooltip=%s;\n", define)
+			_, _ = fmt.Fprintf(d.builder, "tooltip=%s;\n", strconv.Quote(structDefine(typ, types)))
 			_, _ = fmt.Fprintln(d.builder, "style=dotted;")
 			_, _ = fmt.Fprintln(d.builder, `bgcolor="#f2fff2";`)
 			_, _ = fmt.Fprintln(d.builder, `margin="0,0";`)
 			d.writeElementsEdge(v, func(name string) map[string]string {
 				tip := name
 				if doc := typ.Docs[name]; len(doc) > 0 {
-					tip = doc
+					tip += ": " + doc
 				}
 				return map[string]string{
 					labelKey:       name,
@@ -225,4 +181,50 @@ func (d *drawer) Draw(tree Tree) []byte {
 
 	d.builder.WriteRune('}')
 	return d.builder.Bytes()
+}
+
+func structDefine(typ *Type, types map[string]*Type) string {
+	str := &bytes.Buffer{}
+	_, _ = fmt.Fprintf(str, "type %s struct {\n", typ.Name)
+	rangeMap(typ.Elements, func(key, value string, index int) {
+		if typ.Anonymous[key] {
+			_, _ = fmt.Fprintf(str, "%s\n", types[value].String)
+		} else {
+			_, _ = fmt.Fprintf(str, "%s %s\n", key, types[value].String)
+		}
+	})
+	_, _ = fmt.Fprintf(str, "}")
+	b, _ := format.Source(str.Bytes())
+	return strings.Replace(string(b), "\t", "    ", -1)
+}
+
+func (d *drawer) writeProperty(properties map[string]string) {
+	d.builder.WriteRune('[')
+	writeMap(properties, "=", `"`, ` `, d.builder)
+	d.builder.WriteRune(']')
+}
+
+func (d *drawer) writeNode(name string, properties map[string]string) {
+	d.builder.WriteString(name)
+	d.builder.WriteString(" ")
+	d.writeProperty(properties)
+	d.builder.WriteString(";\n")
+}
+
+func (d *drawer) writeEdge(src, dst string, properties map[string]string) {
+	_, _ = fmt.Fprint(d.builder, src, " -> ", dst, " ")
+	properties["arrowsize"] = "0.7"
+	properties["weight"] = "100"
+	properties["fontsize"] = "10"
+	d.writeProperty(properties)
+	d.builder.WriteString(";\n")
+}
+
+func writeMap(kv map[string]string, sep, wrap, join string, writer io.Writer) {
+	rangeMap(kv, func(key, value string, i int) {
+		_, _ = fmt.Fprint(writer, key, sep, wrap, value, wrap)
+		if i != len(kv)-1 {
+			_, _ = fmt.Fprintf(writer, join)
+		}
+	})
 }

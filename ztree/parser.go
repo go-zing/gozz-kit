@@ -37,6 +37,23 @@ type (
 	}
 )
 
+func (tree Tree) typesMap() map[string]*Type {
+	types := make(map[string]*Type)
+	for i, ti := range tree.Types {
+		types[ti.Id] = &tree.Types[i]
+	}
+	return types
+}
+func (tree Tree) maxReferred() int {
+	max := 0
+	for _, v := range tree.Values {
+		if v.Referred > max {
+			max = v.Referred
+		}
+	}
+	return max
+}
+
 type parser struct {
 	Option Option
 

@@ -4,26 +4,60 @@ import (
 	"bytes"
 	"fmt"
 	"go/format"
-	"io"
 	"sort"
 	"strconv"
 	"strings"
 )
 
+const (
+	keyLabel        = "label"
+	keyTooltip      = "tooltip"
+	keyLabelTooltip = keyLabel + keyTooltip
+
+	typeInterface = "interface"
+	typeStruct    = "struct"
+	typeMap       = "map"
+	typeArray     = "array"
+	typeSlice     = "slice"
+	typeFunc      = "func"
+
+	colorScheme = "pastel19"
+)
+
 var (
 	kindColor = map[string]string{
-		"interface": "#A6E7FF",
-		"struct":    "#CCFF00",
-		"map":       "#FFFF38",
-		"slice":     "#FBAED2",
-		"array":     "#FBAED2",
-		"func":      "#FF9933",
-		"":          "#FBE7B2",
+		typeInterface: "1",
+		typeStruct:    "2",
+		typeMap:       "3",
+		typeSlice:     "4",
+		typeArray:     "5",
+		typeFunc:      "6",
+		"":            "7",       // default
+		"bg":          "#f6fff6", // struct background
+	}
+
+	graphProperties = map[string]map[string]string{
+		"node": {
+			"shape":       "rect",
+			"style":       "filled",
+			"margin":      "0.05,0",
+			"height":      "0.25",
+			"colorscheme": colorScheme,
+		},
+		"edge": {
+			"arrowsize": "0.6",
+			"fontsize":  "10",
+		},
+		"graph": {
+			"style":  "dotted",
+			"margin": "0,0",
+		},
 	}
 )
 
 type drawer struct {
 	builder *bytes.Buffer
+	*Tree
 }
 
 func (d *drawer) color(kind string) string {
@@ -35,23 +69,21 @@ func (d *drawer) color(kind string) string {
 }
 
 func (d *drawer) writeValueNode(max int, v *Value, typ *Type) {
-	tip := typ.Name
+	tooltip := typ.Name
 	if len(typ.Name) == 0 {
-		tip = typ.String
+		tooltip = typ.String
 	} else if len(typ.Package) > 0 {
-		tip = typ.Package + "." + typ.Name
+		tooltip = typ.Package + "." + typ.Name
 	}
 
 	if doc := typ.Docs[""]; len(doc) > 0 {
-		tip += `\n` + doc
+		tooltip += "\n" + doc
 	}
 
 	d.writeNode(v.Id, map[string]string{
-		"label":     typ.String,
+		keyLabel:    typ.String,
+		keyTooltip:  tooltip,
 		"fillcolor": d.color(typ.Kind),
-		"margin":    "0.05,0",
-		"height":    "0.25",
-		"tooltip":   tip,
 		"fontsize":  fmt.Sprintf("%.1f", 8+8*float64(v.Referred)/float64(max)),
 	})
 }
@@ -72,8 +104,7 @@ func (d *drawer) writeElementsEdge(v *Value, fn func(name string) map[string]str
 }
 
 func Draw(name string, tree Tree) []byte {
-	bf := bytes.NewBufferString(fmt.Sprintf("digraph %s {\nnode [style=filled shape=rect]\n", name))
-	return (&drawer{builder: bf}).Draw(tree)
+	return (&drawer{builder: &bytes.Buffer{}, Tree: &tree}).Draw(name)
 }
 
 type mergeElements struct {
@@ -81,115 +112,117 @@ type mergeElements struct {
 	Id  string
 }
 
-func (d *drawer) Draw(tree Tree) []byte {
-	types := make(map[string]*Type)
-	for i, ti := range tree.Types {
-		types[ti.Id] = &tree.Types[i]
+func (d *drawer) maxReferred() int {
+	return d.Tree.maxReferred()
+}
+
+func (d *drawer) writeValue(value *Value, types map[string]*Type, patch map[string]mergeElements) {
+	valueType := types[value.Type]
+
+	elements, merged := patch[value.Id]
+	if !merged || elements.Id == value.Id {
+		value.Referred += elements.Len
+		d.writeValueNode(d.maxReferred(), value, valueType)
+	} else {
+		value.Id = elements.Id
 	}
 
-	patch := make(map[string]mergeElements)
-
-	max := 0
-	for _, v := range tree.Values {
-		if v.Referred > max {
-			max = v.Referred
-		}
-	}
-
-	for index := range tree.Values {
-		v := &tree.Values[index]
-		typ := types[v.Type]
-
-		elements, merged := patch[v.Id]
-		if !merged || elements.Id == v.Id {
-			v.Referred += elements.Len
-			d.writeValueNode(max, v, typ)
+	switch valueType.Kind {
+	case typeMap, typeSlice, typeArray:
+		le := len(value.Elements)
+		if elementType := types[valueType.Elements[""]]; elementType != nil && elementType.Kind == typeInterface && le > 1 {
+			for key, element := range value.Elements {
+				if key == "0" {
+					d.writeEdge(value.Id, element, map[string]string{
+						keyLabel:        "elements",
+						keyLabelTooltip: "total: " + strconv.Itoa(le),
+					})
+				}
+				patch[element] = mergeElements{Len: le, Id: value.Elements["0"]}
+			}
 		} else {
-			v.Id = elements.Id
-		}
-
-		labelKey := "label"
-
-		switch typ.Kind {
-		case "map", "slice", "array":
-			le := len(v.Elements)
-			if et := types[typ.Elements[""]]; et != nil && et.Kind == "interface" && le > 1 {
-				for key, element := range v.Elements {
-					if key == "0" {
-						d.writeEdge(v.Id, element, map[string]string{
-							labelKey:       "elements",
-							"labeltooltip": "total: " + strconv.Itoa(le),
-						})
-					}
-					patch[element] = mergeElements{Len: le, Id: v.Elements["0"]}
-				}
-			} else {
-				d.writeElementsEdge(v, func(name string) map[string]string {
-					return map[string]string{
-						labelKey:       "element",
-						"labeltooltip": "index: " + name,
-					}
-				})
-			}
-		case "struct":
-			_, _ = fmt.Fprintf(d.builder, "subgraph cluster_%s {\n", v.Id)
-			_, _ = fmt.Fprintf(d.builder, "tooltip=%s;\n", strconv.Quote(structDefine(typ, types)))
-			_, _ = fmt.Fprintln(d.builder, "style=dotted;")
-			_, _ = fmt.Fprintln(d.builder, `bgcolor="#f2fff2";`)
-			_, _ = fmt.Fprintln(d.builder, `margin="0,0";`)
-			d.writeElementsEdge(v, func(name string) map[string]string {
-				tip := name
-				if doc := typ.Docs[name]; len(doc) > 0 {
-					tip += ": " + doc
-				}
+			d.writeElementsEdge(value, func(name string) map[string]string {
 				return map[string]string{
-					labelKey:       name,
-					"arrowhead":    "open",
-					"labeltooltip": tip,
+					keyLabel:        "element",
+					keyLabelTooltip: "index: " + name,
 				}
 			})
-			d.builder.WriteString("}\n")
-		case "interface":
-			str := &strings.Builder{}
-			rangeMap(typ.Elements, func(key, value string, index int) {
-				str.WriteString(strings.Replace(types[value].String, "func", "func "+key, 1))
-				if doc := typ.Docs[key]; len(doc) > 0 {
-					str.WriteString(`\n`)
-					str.WriteString(doc)
-				}
-				if index != len(typ.Elements)-1 {
-					str.WriteString(`\n`)
-				}
-			})
-			if str.Len() == 0 {
-				str.WriteString("any")
-			}
-
-			m := map[string]string{
-				labelKey:       "implement",
-				"dir":          "back",
-				"arrowtail":    "onormal",
-				"labeltooltip": str.String(),
-			}
-			if !merged {
-				m["style"] = "dashed"
-			}
-			d.writeElementsEdge(v, func(string) map[string]string { return m })
 		}
+	case typeStruct:
+		_, _ = fmt.Fprintf(d.builder, "subgraph cluster_%s {\n", value.Id)
+		d.writeProperty(map[string]string{
+			keyTooltip: structDefine(valueType, types),
+			"bgcolor":  kindColor["bg"],
+		})
+		d.writeElementsEdge(value, func(name string) map[string]string {
+			tooltip := name
+			if doc := valueType.Docs[name]; len(doc) > 0 {
+				tooltip += ": " + doc
+			}
+			return map[string]string{
+				keyLabel:        name,
+				keyLabelTooltip: tooltip,
+				"arrowhead":     "open",
+			}
+		})
+		d.builder.WriteString("}\n")
+	case typeInterface:
+		attrs := map[string]string{
+			keyLabel:        "implement",
+			keyLabelTooltip: interfaceDefine(valueType, types),
+			"dir":           "back",
+			"arrowtail":     "onormal",
+		}
+		if !merged {
+			attrs["style"] = "dashed"
+		}
+		d.writeElementsEdge(value, func(string) map[string]string { return attrs })
 	}
+}
 
+func (d *drawer) Draw(name string) []byte {
+	patch := make(map[string]mergeElements)
+	types := d.Tree.typesMap()
+	d.builder.WriteString("digraph ")
+	d.builder.WriteString(name)
+	d.builder.WriteString(" {\n")
+	for _, str := range []string{"node", "edge", "graph"} {
+		d.writeNode(str, graphProperties[str])
+	}
+	for index := range d.Tree.Values {
+		d.writeValue(&d.Tree.Values[index], types, patch)
+	}
 	d.builder.WriteRune('}')
 	return d.builder.Bytes()
+}
+
+func interfaceDefine(valueType *Type, types map[string]*Type) string {
+	str := &strings.Builder{}
+	rangeMap(valueType.Elements, func(key, value string, index int) {
+		str.WriteString(strings.Replace(types[value].String, "func", "func "+key, 1))
+		if doc := valueType.Docs[key]; len(doc) > 0 {
+			str.WriteString("\n")
+			str.WriteString(doc)
+		}
+		if index != len(valueType.Elements)-1 {
+			str.WriteString("\n")
+		}
+	})
+	if str.Len() == 0 {
+		str.WriteString("any")
+	}
+	return str.String()
 }
 
 func structDefine(typ *Type, types map[string]*Type) string {
 	str := &bytes.Buffer{}
 	_, _ = fmt.Fprintf(str, "type %s struct {\n", typ.Name)
 	rangeMap(typ.Elements, func(key, value string, index int) {
-		if typ.Anonymous[key] {
-			_, _ = fmt.Fprintf(str, "%s\n", types[value].String)
-		} else {
-			_, _ = fmt.Fprintf(str, "%s %s\n", key, types[value].String)
+		if elementType, ok := types[value]; ok {
+			if !typ.Anonymous[key] {
+				_, _ = fmt.Fprintf(str, key)
+			}
+			_, _ = fmt.Fprintf(str, " %s\n", elementType.String)
 		}
 	})
 	_, _ = fmt.Fprintf(str, "}")
@@ -198,31 +231,23 @@ func structDefine(typ *Type, types map[string]*Type) string {
 }
 
 func (d *drawer) writeProperty(properties map[string]string) {
-	d.builder.WriteRune('[')
-	writeMap(properties, "=", `"`, ` `, d.builder)
-	d.builder.WriteRune(']')
+	rangeMap(properties, func(key, value string, i int) {
+		_, _ = fmt.Fprint(d.builder, key, "=", strconv.Quote(value))
+		if i != len(properties)-1 {
+			_, _ = fmt.Fprintf(d.builder, " ")
+		}
+	})
 }
 
 func (d *drawer) writeNode(name string, properties map[string]string) {
 	d.builder.WriteString(name)
-	d.builder.WriteString(" ")
+	d.builder.WriteString(" [")
 	d.writeProperty(properties)
-	d.builder.WriteString(";\n")
+	d.builder.WriteString("];\n")
 }
 
 func (d *drawer) writeEdge(src, dst string, properties map[string]string) {
-	_, _ = fmt.Fprint(d.builder, src, " -> ", dst, " ")
-	properties["arrowsize"] = "0.6"
-	properties["fontsize"] = "10"
+	_, _ = fmt.Fprint(d.builder, src, " -> ", dst, " [")
 	d.writeProperty(properties)
-	d.builder.WriteString(";\n")
-}
-
-func writeMap(kv map[string]string, sep, wrap, join string, writer io.Writer) {
-	rangeMap(kv, func(key, value string, i int) {
-		_, _ = fmt.Fprint(writer, key, sep, wrap, value, wrap)
-		if i != len(kv)-1 {
-			_, _ = fmt.Fprintf(writer, join)
-		}
-	})
+	d.builder.WriteString("];\n")
 }

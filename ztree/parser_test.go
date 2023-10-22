@@ -43,5 +43,5 @@ func TestDraw(t *testing.T) {
 	}, _T0{
 		Field:  ptr,
 		_field: ptr,
-	}, ptr}, WithDocFunc(func(p reflect.Type, field string) string { return doc[p][field] }))))
+	}, ptr, 9}, WithDocFunc(func(p reflect.Type, field string) string { return doc[p][field] }))))
 }

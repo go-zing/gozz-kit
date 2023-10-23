@@ -11,6 +11,14 @@ import (
 
 //go:generate gozz run -p "option" -p "tag" .
 
+// +zz:option
+type Option struct {
+	ExpandPackages []interface{}
+	ExpandTypes    []interface{}
+	Unexported     bool
+	DocFunc        func(p reflect.Type, field string) string
+}
+
 // +zz:tag:json:{{ snake .FieldName }}
 type (
 	Value struct {
@@ -57,24 +65,53 @@ func (tree Tree) maxReferred() int {
 type parser struct {
 	Option Option
 
-	types  map[reflect.Type]*Type
-	values map[reflect.Value]*Value
+	expandPkg  map[string]bool
+	expandType map[reflect.Type]bool
+	types      map[reflect.Type]*Type
+	values     map[reflect.Value]*Value
 }
 
-// +zz:option
-type Option struct {
-	Unexported bool
-	DocFunc    func(p reflect.Type, field string) string
+func setupParser(v interface{}, opts ...func(*Option)) *parser {
+	p := &parser{}
+
+	p.Option.applyOptions(opts...)
+
+	if p.Option.DocFunc == nil {
+		p.Option.DocFunc = func(p reflect.Type, field string) string { return "" }
+	}
+
+	for _, iv := range append(p.Option.ExpandPackages, v) {
+		rt := reflect.TypeOf(iv)
+		for rt.Kind() == reflect.Ptr {
+			rt = rt.Elem()
+		}
+		if p.expandPkg == nil {
+			p.expandPkg = make(map[string]bool)
+		}
+		p.expandPkg[rt.PkgPath()] = true
+	}
+
+	for _, iv := range append(p.Option.ExpandTypes, v) {
+		rt := reflect.TypeOf(iv)
+		for rt.Kind() == reflect.Ptr {
+			rt = rt.Elem()
+		}
+		if p.expandType == nil {
+			p.expandType = make(map[reflect.Type]bool)
+		}
+		p.expandType[rt] = true
+	}
+	return p
 }
 
 func Parse(v interface{}, opts ...func(*Option)) (tree Tree) {
-	p := &parser{Option: Option{
-		Unexported: false,
-		DocFunc:    func(p reflect.Type, field string) string { return "" },
-	}}
-	p.Option.applyOptions(opts...)
-	p.ParseValues(reflect.ValueOf(v))
+	p := setupParser(v, opts...)
+	p.ParseValues(reflect.ValueOf(v), true)
+	return p.tree()
+}
 
+func (p *parser) tree() Tree {
+	// types
 	tks := make([]reflect.Type, 0)
 	for k := range p.types {
 		tks = append(tks, k)
@@ -84,12 +121,11 @@ func Parse(v interface{}, opts ...func(*Option)) (tree Tree) {
 		j, _ = strconv.Atoi(p.types[tks[j]].Id)
 		return i < j
 	})
-
 	types := make([]Type, 0, len(tks))
 	for _, key := range tks {
 		types = append(types, *p.types[key])
 	}
-
+	// values
 	vks := make([]reflect.Value, 0)
 	for k := range p.values {
 		vks = append(vks, k)
@@ -103,7 +139,6 @@ func Parse(v interface{}, opts ...func(*Option)) (tree Tree) {
 	for _, key := range vks {
 		values = append(values, *p.values[key])
 	}
-
 	return Tree{Values: values, Types: types}
 }
 
@@ -149,13 +184,10 @@ func (p *parser) ParseTypes(rt reflect.Type) (typ *Type) {
 	case reflect.Struct:
 		n := rt.NumField()
 		for i := 0; i < n; i++ {
-			if ti := rt.Field(i); ti.Anonymous || p.Option.Unexported || len(ti.PkgPath) == 0 {
-				typ.Docs[ti.Name] = p.Option.DocFunc(rt, ti.Name)
-				if ti.Anonymous {
-					typ.Anonymous[ti.Name] = ti.Anonymous
-				}
-				typ.Elements[ti.Name] = p.ParseTypes(ti.Type).Id
-			}
+			ti := rt.Field(i)
+			typ.Anonymous[ti.Name] = ti.Anonymous
+			typ.Docs[ti.Name] = p.Option.DocFunc(rt, ti.Name)
+			typ.Elements[ti.Name] = p.ParseTypes(ti.Type).Id
 		}
 	}
 	return
@@ -165,7 +197,9 @@ func getUnexportedField(field reflect.Value) reflect.Value {
 	return reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
 }
 
-func (p *parser) ParseValues(rv reflect.Value) (object *Value) {
+func (p *parser) isExpand(rt reflect.Type) bool { return p.expandType[rt] || p.expandPkg[rt.PkgPath()] }
+
+func (p *parser) ParseValues(rv reflect.Value, expand bool) (object *Value) {
 	for rv.Kind() == reflect.Ptr && !rv.IsNil() {
 		rv = rv.Elem()
 	}
@@ -188,7 +222,35 @@ func (p *parser) ParseValues(rv reflect.Value) (object *Value) {
 	rt := rv.Type()
 	object.Type = p.ParseTypes(rt).Id
 
+	if expand = expand || p.isExpand(rt) || rt.Kind() == reflect.Interface; !expand {
+		return
+	}
+
 	switch rt.Kind() {
+	case reflect.Interface:
+		if !rv.IsNil() {
+			object.Elements[""] = p.ParseValues(rv.Elem(), expand).Id
+		}
+
+	case reflect.Struct:
+		if !p.isExpand(rt) {
+			return
+		}
+
+		n := rv.NumField()
+		object.Referred += n
+		for i := 0; i < n; i++ {
+			ti := rt.Field(i)
+			if ti.Tag.Get("ztree") == "-" {
+				continue
+			}
+			vi := rv.Field(i)
+			if len(ti.PkgPath) > 0 && vi.CanAddr() {
+				vi = getUnexportedField(vi)
+			}
+			object.Elements[ti.Name] = p.ParseValues(vi, len(ti.PkgPath) == 0 || p.Option.Unexported).Id
+		}
+
 	case reflect.Map:
 		keys := rv.MapKeys()
 		object.Referred += len(keys)
@@ -196,41 +258,14 @@ func (p *parser) ParseValues(rv reflect.Value) (object *Value) {
 			return fmt.Sprintf("%v", keys[i].Interface()) < fmt.Sprintf("%v", keys[j].Interface())
 		})
 		for i, key := range keys {
-			object.Elements[strconv.Itoa(i)] = p.ParseValues(rv.MapIndex(key)).Id
+			object.Elements[strconv.Itoa(i)] = p.ParseValues(rv.MapIndex(key), true).Id
 		}
 
 	case reflect.Slice, reflect.Array:
 		l := rv.Len()
 		object.Referred += l
 		for i := 0; i < l; i++ {
-			object.Elements[strconv.Itoa(i)] = p.ParseValues(rv.Index(i)).Id
-		}
-
-	case reflect.Interface:
-		if !rv.IsNil() {
-			object.Elements[""] = p.ParseValues(rv.Elem()).Id
-		}
-
-	case reflect.Struct:
-		n := rv.NumField()
-		object.Referred += n
-		for i := 0; i < n; i++ {
-			ti := rt.Field(i)
-
-			if ti.Tag.Get("ztree") == "-" {
-				continue
-			}
-
-			vi := rv.Field(i)
-			unexported := len(ti.PkgPath) > 0
-
-			if unexported && vi.CanAddr() {
-				vi = getUnexportedField(vi)
-			}
-
-			if ti.Anonymous || p.Option.Unexported || len(ti.PkgPath) == 0 {
-				object.Elements[ti.Name] = p.ParseValues(vi).Id
-			}
+			object.Elements[strconv.Itoa(i)] = p.ParseValues(rv.Index(i), true).Id
 		}
 	}
 	return

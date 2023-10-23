@@ -16,6 +16,8 @@ type (
 		Buff io.Reader
 		// unexported field interface
 		_field
+
+		X *bytes.Buffer `ztree:"-"`
 	}
 
 	// field interface

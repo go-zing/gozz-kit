@@ -153,7 +153,7 @@ func (d *drawer) writeValue(value *Value, types map[string]*Type, patch map[stri
 	case typeStruct:
 		d.writeGraph("subgraph", "cluster_"+value.Id, func() {
 			d.writeAttributes(map[string]string{
-				keyLabel:   types[value.Type].Fullname(),
+				keyLabel:   types[value.Type].Package,
 				keyTooltip: structDefine(value, types),
 				"bgcolor":  kindColor["bg"],
 			})

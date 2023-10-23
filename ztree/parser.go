@@ -50,6 +50,14 @@ const (
 	flagUnexported
 )
 
+func (typ Type) Fullname() string {
+	if len(typ.Package) > 0 && len(typ.Name) > 0 {
+		return typ.Package + "." + typ.Name
+	} else {
+		return typ.String
+	}
+}
+
 func (tree Tree) typesMap() map[string]*Type {
 	types := make(map[string]*Type)
 	for i, ti := range tree.Types {

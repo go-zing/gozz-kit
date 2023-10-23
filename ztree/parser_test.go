@@ -49,7 +49,11 @@ func TestDraw(t *testing.T) {
 		}, _T0{
 			Field:  ptr,
 			_field: ptr,
-		}, ptr, 9},
+		}, ptr, []interface{}{
+			1,
+		}, []interface{}{
+			ptr,
+		}},
 			WithExpandPackages([]interface{}{bytes.Buffer{}}),
 			WithExpandTypes([]interface{}{_T0{}}),
 			WithUnexported(true),

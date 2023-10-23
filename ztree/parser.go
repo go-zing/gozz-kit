@@ -25,23 +25,29 @@ type (
 		Type     string            `json:"type"`
 		Referred int               `json:"referred"`
 		Elements map[string]string `json:"elements"`
+		Flags    map[string]int    `json:"flags"`
 	}
 
 	Type struct {
-		Id        string            `json:"id"`
-		Kind      string            `json:"kind"`
-		Package   string            `json:"package"`
-		Name      string            `json:"name"`
-		String    string            `json:"string"`
-		Elements  map[string]string `json:"elements"`
-		Anonymous map[string]bool   `json:"anonymous"`
-		Docs      map[string]string `json:"docs"`
+		Id       string            `json:"id"`
+		Kind     string            `json:"kind"`
+		Package  string            `json:"package"`
+		Name     string            `json:"name"`
+		String   string            `json:"string"`
+		Elements map[string]string `json:"elements"`
+		Docs     map[string]string `json:"docs"`
 	}
 
 	Tree struct {
 		Values []Value `json:"values"`
 		Types  []Type  `json:"types"`
 	}
+)
+
+const (
+	flagAnonymous = 1 << iota
+	flagPointer
+	flagUnexported
 )
 
 func (tree Tree) typesMap() map[string]*Type {
@@ -156,14 +162,13 @@ func (p *parser) ParseTypes(rt reflect.Type) (id string) {
 
 	id = strconv.Itoa(len(p.types))
 	typ = &Type{
-		Id:        id,
-		Kind:      rt.Kind().String(),
-		Package:   rt.PkgPath(),
-		Name:      rt.Name(),
-		String:    rt.String(),
-		Elements:  make(map[string]string),
-		Anonymous: make(map[string]bool),
-		Docs:      map[string]string{"": p.fieldDoc(rt, "")},
+		Id:       id,
+		Kind:     rt.Kind().String(),
+		Package:  rt.PkgPath(),
+		Name:     rt.Name(),
+		String:   rt.String(),
+		Elements: make(map[string]string),
+		Docs:     map[string]string{"": p.fieldDoc(rt, "")},
 	}
 	if p.types == nil {
 		p.types = make(map[reflect.Type]*Type)
@@ -182,7 +187,6 @@ func (p *parser) ParseTypes(rt reflect.Type) (id string) {
 	case reflect.Struct:
 		for i := 0; i < rt.NumField(); i++ {
 			ti := rt.Field(i)
-			typ.Anonymous[ti.Name] = ti.Anonymous
 			typ.Docs[ti.Name] = p.fieldDoc(rt, ti.Name)
 			typ.Elements[ti.Name] = p.ParseTypes(ti.Type)
 		}
@@ -205,60 +209,75 @@ func (p *parser) ParseValues(rv reflect.Value, exported bool) (id string) {
 		rv = getUnexportedField(rv)
 	}
 
-	object := p.values[rv]
-	if object != nil {
-		object.Referred += 1
-		return object.Id
+	value := p.values[rv]
+	if value != nil {
+		value.Referred += 1
+		return value.Id
 	}
 
 	rt := rv.Type()
-	object = &Value{
+	value = &Value{
 		Id:       strconv.Itoa(len(p.values)),
 		Elements: make(map[string]string),
+		Flags:    make(map[string]int),
 		Type:     p.ParseTypes(rt),
 	}
 	if p.values == nil {
 		p.values = make(map[reflect.Value]*Value)
 	}
-	p.values[rv] = object
+	p.values[rv] = value
 
-	if id = object.Id; !(exported || p.Option.Unexported || p.isExpand(rt) || rt.Kind() == reflect.Interface) {
+	if id = value.Id; !(exported || p.Option.Unexported || p.isExpand(rt) || rt.Kind() == reflect.Interface) {
 		return
 	}
 
 	switch rt.Kind() {
 	case reflect.Interface:
 		if !rv.IsNil() {
-			object.Elements[""] = p.ParseValues(rv.Elem(), exported)
+			p.parseValue(value, "", rv.Elem(), exported, false)
 		}
 
 	case reflect.Struct:
 		if p.isExpand(rt) {
 			n := rv.NumField()
-			object.Referred += n
+			value.Referred += n
 			for i := 0; i < n; i++ {
-				if ti := rt.Field(i); ti.Tag.Get("ztree") != "-" {
-					object.Elements[ti.Name] = p.ParseValues(rv.Field(i), len(ti.PkgPath) == 0)
-				}
+				ti := rt.Field(i)
+				p.parseValue(value, ti.Name, rv.Field(i), len(ti.PkgPath) == 0, ti.Anonymous)
 			}
 		}
 
 	case reflect.Map:
 		keys := rv.MapKeys()
-		object.Referred += len(keys)
+		value.Referred += len(keys)
 		sort.Slice(keys, func(i, j int) bool {
 			return fmt.Sprintf("%v", keys[i].Interface()) < fmt.Sprintf("%v", keys[j].Interface())
 		})
 		for i, key := range keys {
-			object.Elements[strconv.Itoa(i)] = p.ParseValues(rv.MapIndex(key), true)
+			p.parseValue(value, strconv.Itoa(i), rv.MapIndex(key), true, false)
 		}
 
 	case reflect.Slice, reflect.Array:
 		l := rv.Len()
-		object.Referred += l
+		value.Referred += l
 		for i := 0; i < l; i++ {
-			object.Elements[strconv.Itoa(i)] = p.ParseValues(rv.Index(i), true)
+			p.parseValue(value, strconv.Itoa(i), rv.Index(i), true, false)
 		}
 	}
 	return
+}
+
+func (p *parser) parseValue(v *Value, key string, rv reflect.Value, exported, anonymous bool) {
+	v.Flags[key] |= flagAnonymous * boolFlag(anonymous)
+	v.Flags[key] |= flagUnexported * boolFlag(!exported)
+	v.Flags[key] |= flagPointer * boolFlag(rv.Kind() == reflect.Ptr)
+	v.Elements[key] = p.ParseValues(rv, exported)
+}
+
+func boolFlag(b bool) int {
+	if b {
+		return 1
+	} else {
+		return 0
+	}
 }

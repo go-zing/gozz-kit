@@ -116,6 +116,13 @@ func (d *drawer) maxReferred() int {
 	return d.Tree.maxReferred()
 }
 
+func pointerPrefix(value *Value, name string) string {
+	if value.Flags[name]&flagPointer != 0 {
+		return "*"
+	}
+	return ""
+}
+
 func (d *drawer) writeValue(value *Value, types map[string]*Type, patch map[string]mergeElements) {
 	valueType := types[value.Type]
 
@@ -143,7 +150,7 @@ func (d *drawer) writeValue(value *Value, types map[string]*Type, patch map[stri
 		} else {
 			d.writeElementsEdge(value, func(name string) map[string]string {
 				return map[string]string{
-					keyLabel:        "element",
+					keyLabel:        pointerPrefix(value, "") + "element",
 					keyLabelTooltip: "index: " + name,
 				}
 			})
@@ -151,7 +158,7 @@ func (d *drawer) writeValue(value *Value, types map[string]*Type, patch map[stri
 	case typeStruct:
 		_, _ = fmt.Fprintf(d.builder, "subgraph cluster_%s {\n", value.Id)
 		d.writeProperty(map[string]string{
-			keyTooltip: structDefine(valueType, types),
+			keyTooltip: structDefine(value, types),
 			"bgcolor":  kindColor["bg"],
 		})
 		d.writeElementsEdge(value, func(name string) map[string]string {
@@ -159,16 +166,20 @@ func (d *drawer) writeValue(value *Value, types map[string]*Type, patch map[stri
 			if doc := valueType.Docs[name]; len(doc) > 0 {
 				tooltip += ": " + doc
 			}
-			return map[string]string{
-				keyLabel:        name,
+			m := map[string]string{
+				keyLabel:        pointerPrefix(value, name) + name,
 				keyLabelTooltip: tooltip,
 				"arrowhead":     "open",
 			}
+			if value.Flags[name]&flagAnonymous != 0 {
+				m["fontcolor"] = "#aaaaaa"
+			}
+			return m
 		})
 		d.builder.WriteString("}\n")
 	case typeInterface:
 		attrs := map[string]string{
-			keyLabel:        "implement",
+			keyLabel:        pointerPrefix(value, "") + "implement",
 			keyLabelTooltip: interfaceDefine(valueType, types),
 			"dir":           "back",
 			"arrowtail":     "onormal",
@@ -193,7 +204,7 @@ func (d *drawer) Draw(name string) []byte {
 		d.writeValue(&d.Tree.Values[index], types, patch)
 	}
 	d.builder.WriteRune('}')
-	return d.builder.Bytes()
+	return bytes.Replace(d.builder.Bytes(), []byte("interface {"), []byte("interface{"), -1)
 }
 
 func interfaceDefine(valueType *Type, types map[string]*Type) string {
@@ -214,15 +225,18 @@ func interfaceDefine(valueType *Type, types map[string]*Type) string {
 	return str.String()
 }
 
-func structDefine(typ *Type, types map[string]*Type) string {
+func structDefine(value *Value, types map[string]*Type) string {
+	typ := types[value.Type]
 	str := &bytes.Buffer{}
 	_, _ = fmt.Fprintf(str, "type %s struct {\n", typ.Name)
-	rangeMap(typ.Elements, func(key, value string, index int) {
-		if elementType, ok := types[value]; ok {
-			if !typ.Anonymous[key] {
-				_, _ = fmt.Fprintf(str, key)
+	rangeMap(typ.Elements, func(fieldName, fieldType string, index int) {
+		if elementType, ok := types[fieldType]; ok {
+			if value.Flags[fieldName]&flagAnonymous != 0 {
+				_, _ = fmt.Fprintf(str, fieldName)
+				_, _ = fmt.Fprintf(str, " ")
 			}
-			_, _ = fmt.Fprintf(str, " %s\n", elementType.String)
+			_, _ = fmt.Fprintf(str, pointerPrefix(value, fieldName))
+			_, _ = fmt.Fprintf(str, "%s\n", elementType.String)
 		}
 	})
 	_, _ = fmt.Fprintf(str, "}")

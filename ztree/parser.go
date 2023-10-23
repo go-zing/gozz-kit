@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
-	"strings"
 	"unsafe"
 )
 
@@ -76,10 +75,6 @@ func setupParser(v interface{}, opts ...func(*Option)) *parser {
 
 	p.Option.applyOptions(opts...)
 
-	if p.Option.DocFunc == nil {
-		p.Option.DocFunc = func(p reflect.Type, field string) string { return "" }
-	}
-
 	for _, iv := range append(p.Option.ExpandPackages, v) {
 		rt := reflect.TypeOf(iv)
 		for rt.Kind() == reflect.Ptr {
@@ -142,52 +137,54 @@ func (p *parser) tree() Tree {
 	return Tree{Values: values, Types: types}
 }
 
-func (p *parser) ParseTypes(rt reflect.Type) (typ *Type) {
+func (p *parser) fieldDoc(rt reflect.Type, field string) string {
+	if p.Option.DocFunc == nil {
+		return ""
+	}
+	return p.Option.DocFunc(rt, field)
+}
+
+func (p *parser) ParseTypes(rt reflect.Type) (id string) {
 	for rt.Kind() == reflect.Ptr {
 		rt = rt.Elem()
 	}
 
 	typ, ok := p.types[rt]
 	if ok {
-		return typ
+		return typ.Id
 	}
+
+	id = strconv.Itoa(len(p.types))
 	typ = &Type{
-		Id:        strconv.Itoa(len(p.types)),
+		Id:        id,
 		Kind:      rt.Kind().String(),
 		Package:   rt.PkgPath(),
 		Name:      rt.Name(),
-		String:    strings.Replace(rt.String(), "interface {", "interface{", -1),
+		String:    rt.String(),
 		Elements:  make(map[string]string),
 		Anonymous: make(map[string]bool),
-		Docs:      make(map[string]string),
+		Docs:      map[string]string{"": p.fieldDoc(rt, "")},
 	}
-
 	if p.types == nil {
 		p.types = make(map[reflect.Type]*Type)
 	}
 	p.types[rt] = typ
 
-	typ.Docs[""] = p.Option.DocFunc(rt, "")
-
 	switch rt.Kind() {
 	case reflect.Map, reflect.Slice, reflect.Array:
-		typ.Elements[""] = p.ParseTypes(rt.Elem()).Id
-
+		typ.Elements[""] = p.ParseTypes(rt.Elem())
 	case reflect.Interface:
-		n := rt.NumMethod()
-		for i := 0; i < n; i++ {
+		for i := 0; i < rt.NumMethod(); i++ {
 			vi := rt.Method(i)
-			typ.Docs[vi.Name] = p.Option.DocFunc(rt, vi.Name)
-			typ.Elements[vi.Name] = p.ParseTypes(vi.Type).Id
+			typ.Docs[vi.Name] = p.fieldDoc(rt, vi.Name)
+			typ.Elements[vi.Name] = p.ParseTypes(vi.Type)
 		}
-
 	case reflect.Struct:
-		n := rt.NumField()
-		for i := 0; i < n; i++ {
+		for i := 0; i < rt.NumField(); i++ {
 			ti := rt.Field(i)
 			typ.Anonymous[ti.Name] = ti.Anonymous
-			typ.Docs[ti.Name] = p.Option.DocFunc(rt, ti.Name)
-			typ.Elements[ti.Name] = p.ParseTypes(ti.Type).Id
+			typ.Docs[ti.Name] = p.fieldDoc(rt, ti.Name)
+			typ.Elements[ti.Name] = p.ParseTypes(ti.Type)
 		}
 	}
 	return
@@ -199,56 +196,51 @@ func getUnexportedField(field reflect.Value) reflect.Value {
 
 func (p *parser) isExpand(rt reflect.Type) bool { return p.expandType[rt] || p.expandPkg[rt.PkgPath()] }
 
-func (p *parser) ParseValues(rv reflect.Value, expand bool) (object *Value) {
+func (p *parser) ParseValues(rv reflect.Value, exported bool) (id string) {
 	for rv.Kind() == reflect.Ptr && !rv.IsNil() {
 		rv = rv.Elem()
 	}
 
-	object, ok := p.values[rv]
-	if ok {
-		object.Referred += 1
-		return object
+	if !exported && rv.CanAddr() {
+		rv = getUnexportedField(rv)
 	}
 
+	object := p.values[rv]
+	if object != nil {
+		object.Referred += 1
+		return object.Id
+	}
+
+	rt := rv.Type()
 	object = &Value{
 		Id:       strconv.Itoa(len(p.values)),
 		Elements: make(map[string]string),
+		Type:     p.ParseTypes(rt),
 	}
 	if p.values == nil {
 		p.values = make(map[reflect.Value]*Value)
 	}
 	p.values[rv] = object
 
-	rt := rv.Type()
-	object.Type = p.ParseTypes(rt).Id
-
-	if expand = expand || p.isExpand(rt) || rt.Kind() == reflect.Interface; !expand {
+	if id = object.Id; !(exported || p.Option.Unexported || p.isExpand(rt) || rt.Kind() == reflect.Interface) {
 		return
 	}
 
 	switch rt.Kind() {
 	case reflect.Interface:
 		if !rv.IsNil() {
-			object.Elements[""] = p.ParseValues(rv.Elem(), expand).Id
+			object.Elements[""] = p.ParseValues(rv.Elem(), exported)
 		}
 
 	case reflect.Struct:
-		if !p.isExpand(rt) {
-			return
-		}
-
-		n := rv.NumField()
-		object.Referred += n
-		for i := 0; i < n; i++ {
-			ti := rt.Field(i)
-			if ti.Tag.Get("ztree") == "-" {
-				continue
+		if p.isExpand(rt) {
+			n := rv.NumField()
+			object.Referred += n
+			for i := 0; i < n; i++ {
+				if ti := rt.Field(i); ti.Tag.Get("ztree") != "-" {
+					object.Elements[ti.Name] = p.ParseValues(rv.Field(i), len(ti.PkgPath) == 0)
+				}
 			}
-			vi := rv.Field(i)
-			if len(ti.PkgPath) > 0 && vi.CanAddr() {
-				vi = getUnexportedField(vi)
-			}
-			object.Elements[ti.Name] = p.ParseValues(vi, len(ti.PkgPath) == 0 || p.Option.Unexported).Id
 		}
 
 	case reflect.Map:
@@ -258,14 +250,14 @@ func (p *parser) ParseValues(rv reflect.Value, expand bool) (object *Value) {
 			return fmt.Sprintf("%v", keys[i].Interface()) < fmt.Sprintf("%v", keys[j].Interface())
 		})
 		for i, key := range keys {
-			object.Elements[strconv.Itoa(i)] = p.ParseValues(rv.MapIndex(key), true).Id
+			object.Elements[strconv.Itoa(i)] = p.ParseValues(rv.MapIndex(key), true)
 		}
 
 	case reflect.Slice, reflect.Array:
 		l := rv.Len()
 		object.Referred += l
 		for i := 0; i < l; i++ {
-			object.Elements[strconv.Itoa(i)] = p.ParseValues(rv.Index(i), true).Id
+			object.Elements[strconv.Itoa(i)] = p.ParseValues(rv.Index(i), true)
 		}
 	}
 	return

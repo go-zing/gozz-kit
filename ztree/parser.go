@@ -188,10 +188,6 @@ func (p *parser) ParseValues(rv reflect.Value) (object *Value) {
 	rt := rv.Type()
 	object.Type = p.ParseTypes(rt).Id
 
-	if !(p.Option.Unexported || rv.CanInterface()) {
-		return
-	}
-
 	switch rt.Kind() {
 	case reflect.Map:
 		keys := rv.MapKeys()
@@ -220,13 +216,21 @@ func (p *parser) ParseValues(rv reflect.Value) (object *Value) {
 		object.Referred += n
 		for i := 0; i < n; i++ {
 			ti := rt.Field(i)
-			vi := rv.Field(i)
 
-			if len(ti.PkgPath) > 0 && vi.CanAddr() {
+			if ti.Tag.Get("ztree") == "-" {
+				continue
+			}
+
+			vi := rv.Field(i)
+			unexported := len(ti.PkgPath) > 0
+
+			if unexported && vi.CanAddr() {
 				vi = getUnexportedField(vi)
 			}
 
-			object.Elements[ti.Name] = p.ParseValues(vi).Id
+			if ti.Anonymous || p.Option.Unexported || len(ti.PkgPath) == 0 {
+				object.Elements[ti.Name] = p.ParseValues(vi).Id
+			}
 		}
 	}
 	return

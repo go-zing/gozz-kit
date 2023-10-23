@@ -188,6 +188,10 @@ func (p *parser) ParseValues(rv reflect.Value) (object *Value) {
 	rt := rv.Type()
 	object.Type = p.ParseTypes(rt).Id
 
+	if !(p.Option.Unexported || rv.CanInterface()) {
+		return
+	}
+
 	switch rt.Kind() {
 	case reflect.Map:
 		keys := rv.MapKeys()

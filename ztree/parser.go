@@ -226,9 +226,7 @@ func (p *parser) ParseValues(rv reflect.Value) (object *Value) {
 				vi = getUnexportedField(vi)
 			}
 
-			if ti.Anonymous || p.Option.Unexported || len(ti.PkgPath) == 0 {
-				object.Elements[ti.Name] = p.ParseValues(vi).Id
-			}
+			object.Elements[ti.Name] = p.ParseValues(vi).Id
 		}
 	}
 	return

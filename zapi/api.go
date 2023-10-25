@@ -17,7 +17,7 @@ type (
 		Resource string
 		Options  map[string]string
 		Invoke   InvokeFunc
-		Param    reflect.Type
+		Request  reflect.Type
 		Response reflect.Type
 	}
 
@@ -31,9 +31,8 @@ type (
 
 	HttpApi struct {
 		Api
-		Method     string
-		Path       string
-		PathParams []string
+		Method string
+		Path   string
 	}
 
 	Iterator interface {
@@ -102,7 +101,7 @@ func (p *Parser) parseApi(rt reflect.Type, spec map[string]interface{}) (api Api
 		return
 	}
 	api.Doc = p.getFieldDoc(rt, api.Name)
-	api.Param, api.Response = p.parseFuncPayload(fm.Type)
+	api.Request, api.Response = p.parseFuncPayload(fm.Type)
 	api.Resource, _ = spec["resource"].(string)
 	api.Options, _ = spec["options"].(map[string]string)
 	api.Invoke, _ = spec["invoke"].(InvokeFunc)

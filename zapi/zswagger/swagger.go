@@ -22,7 +22,7 @@ var escapeReplacer = strings.NewReplacer("/", "_")
 func escape(str string) string { return escapeReplacer.Replace(str) }
 
 type schemaParser struct {
-	types       map[reflect.Type]zapi.PayloadType
+	payloads    map[reflect.Type]zapi.PayloadType
 	definitions spec.Definitions
 }
 
@@ -37,7 +37,69 @@ var defined = map[reflect.Type]func(*spec.Schema){
 
 func RegisterSchemaType(typ reflect.Type, fn func(*spec.Schema)) { defined[typ] = fn }
 
-func Parse(groups []zapi.ApiGroup, types map[reflect.Type]zapi.PayloadType, cast func(api zapi.Api) zapi.HttpApi) (swagger *spec.Swagger) {
+type Binding struct {
+	Path   string
+	Query  string
+	Header string
+	Body   bool
+}
+
+var defaultBindings = map[string]Binding{
+	"GET": {
+		Path:  "*",
+		Query: "*",
+		Body:  false,
+	},
+	"*": {
+		Path:  "uri",
+		Query: "form,query",
+		Body:  true,
+	},
+}
+
+func parseBinding(api *zapi.HttpApi, rules map[string]Binding) Binding {
+	rule, ok := rules[api.Method]
+	if !ok {
+		return rules["*"]
+	}
+	rv := reflect.ValueOf(&rule).Elem()
+	for i := 0; i < rv.NumField(); i++ {
+		v, ok := rv.Field(i).Addr().Interface().(*string)
+		if !ok {
+			continue
+		}
+		ref, ok := rules[*v]
+		*v = reflect.ValueOf(ref).Field(i).String()
+	}
+	return rule
+}
+
+func parseElements(payloads map[reflect.Type]zapi.PayloadType, elements []zapi.PayloadElement, tags string, fn func(zapi.PayloadElement, zapi.TagValues)) {
+	if len(tags) == 0 {
+		return
+	}
+
+	parseElement := func(tag string, ele zapi.PayloadElement) {
+		typ := payloads[ele.Type]
+		values := ele.Tags.Get(tag).Split(",")
+		value := values[0]
+		if value == "-" {
+			return
+		} else if ele.IsAnonymous() && len(value) == 0 && typ.Kind == reflect.Struct {
+			delete(payloads, ele.Type)
+			parseElements(payloads, typ.Elements, tags, fn)
+		}
+		fn(ele, values)
+	}
+
+	for _, tag := range strings.Split(tags, ",") {
+		for _, ele := range elements {
+			parseElement(tag, ele)
+		}
+	}
+}
+
+func Parse(groups []zapi.ApiGroup, payloads map[reflect.Type]zapi.PayloadType, cast func(api zapi.Api) zapi.HttpApi) (swagger *spec.Swagger) {
 	swagger = &spec.Swagger{
 		SwaggerProps: spec.SwaggerProps{
 			Info:        &spec.Info{},
@@ -48,28 +110,83 @@ func Parse(groups []zapi.ApiGroup, types map[reflect.Type]zapi.PayloadType, cast
 		},
 	}
 
-	parser := schemaParser{types: types, definitions: swagger.Definitions}
+	parser := schemaParser{payloads: payloads, definitions: swagger.Definitions}
 
 	setOperation := func(method, path string, operate spec.Operation) {
 		item := swagger.Paths.Paths[path]
 		fieldName := strings.Title(strings.ToLower(method))
-		if v := reflect.ValueOf(&item.PathItemProps).Elem().FieldByName(fieldName); v.IsValid() {
+		if v := reflect.ValueOf(&item).Elem().FieldByName(fieldName); v.IsValid() {
 			v.Set(reflect.ValueOf(&operate))
 			swagger.Paths.Paths[path] = item
 		}
 	}
 
+	bindings := defaultBindings
+
 	parseParams := func(api *zapi.HttpApi) (params []spec.Parameter) {
-		for _, param := range api.PathParams {
-			p := spec.PathParam(param)
-			params = append(params, *p)
+		binding := parseBinding(api, bindings)
+		pathParams := make(map[string]int)
+
+		for _, path := range strings.Split(api.Path, "/") {
+			if strings.HasPrefix(path, "{") && strings.HasSuffix(path, "}") {
+				name := strings.TrimSuffix(strings.TrimPrefix(path, "{"), "}")
+				params = append(params, *spec.PathParam(name))
+				pathParams[name] = len(params) - 1
+			}
+		}
+
+		parseRequestPayload := func(tags string, fn func(element zapi.PayloadElement, values zapi.TagValues)) {
+			cp := make(map[reflect.Type]zapi.PayloadType, len(payloads))
+			for k, v := range payloads {
+				cp[k] = v
+			}
+			parseElements(cp, cp[api.Request].Elements, tags, func(element zapi.PayloadElement, values zapi.TagValues) {
+				if len(values[0]) > 0 {
+					fn(element, values)
+				}
+			})
+		}
+
+		if api.Request != nil && api.Request.Kind() == reflect.Struct {
+			parseParam := func(param *spec.Parameter, element zapi.PayloadElement, values zapi.TagValues) {
+				typ, format, max, min := parseBasicKind(element.Type.Kind())
+				if param.Typed(typ, format); max > 0 {
+					param.WithMaximum(float64(max), false)
+					param.WithMinimum(float64(min), false)
+				}
+			}
+
+			parseRequestPayload(binding.Path, func(element zapi.PayloadElement, values zapi.TagValues) {
+				if index, ok := pathParams[values[0]]; ok {
+					parseParam(&params[index], element, values)
+				}
+			})
+
+			parseRequestPayload(binding.Query, func(element zapi.PayloadElement, values zapi.TagValues) {
+				param := spec.QueryParam(values[0])
+				if parseParam(param, element, values); len(param.Type) > 0 {
+					params = append(params, *param)
+				}
+			})
+
+			parseRequestPayload(binding.Header, func(element zapi.PayloadElement, values zapi.TagValues) {
+				param := spec.HeaderParam(values[0])
+				if parseParam(param, element, values); len(param.Type) > 0 {
+					params = append(params, *param)
+				}
+			})
+		}
+
+		if binding.Body {
+			schema := parser.Parse(payloads[api.Request])
+			params = append(params, *spec.BodyParam("", &schema))
 		}
 		return
 	}
 
 	parseResponse := func(api *zapi.HttpApi) (response *spec.Schema) {
 		if api.Response != nil {
-			schema := parser.Parse(types[api.Response])
+			schema := parser.Parse(payloads[api.Response])
 			response = &schema
 		}
 		return
@@ -86,7 +203,6 @@ func Parse(groups []zapi.ApiGroup, types map[reflect.Type]zapi.PayloadType, cast
 
 	for _, group := range groups {
 		swagger.Tags = append(swagger.Tags, spec.NewTag(group.Fullname(), group.Doc, nil))
-
 		for _, api := range group.Apis {
 			h := cast(api)
 			h.Method = strings.ToUpper(h.Method)
@@ -119,7 +235,7 @@ func (p *schemaParser) Parse(typ zapi.PayloadType) (schema spec.Schema) {
 }
 
 func (p *schemaParser) parseEmbedProperties(ele zapi.PayloadElement, schema *spec.Schema) {
-	embed := p.Parse(p.types[ele.Type])
+	embed := p.Parse(p.payloads[ele.Type])
 	if ref := embed.Ref.String(); len(ref) > 0 {
 		embed = p.definitions[strings.TrimPrefix(ref, definitionsPrefix)]
 	}
@@ -153,9 +269,8 @@ func addElementProperty(dst, property *spec.Schema, key string, required bool) {
 
 func (p *schemaParser) parseElementProperty(ele zapi.PayloadElement, schema *spec.Schema) {
 	values := ele.Tags.Get("json").Split(",")
-	omitempty := values.Exist("omitempty")
 	key := values[0]
-	typ := p.types[ele.Type]
+	typ := p.payloads[ele.Type]
 
 	if key == "-" {
 		return
@@ -172,7 +287,7 @@ func (p *schemaParser) parseElementProperty(ele zapi.PayloadElement, schema *spe
 		property.Ref = spec.Ref{}
 		property.AddToAllOf(spec.Schema{SchemaProps: spec.SchemaProps{Ref: ref}})
 	}
-	addElementProperty(schema, &property, key, !ele.IsPointer() && !omitempty)
+	addElementProperty(schema, &property, key, !ele.IsPointer() && !values.Exist("omitempty"))
 }
 
 func isStandardPackage(pkg string) bool {
@@ -205,7 +320,7 @@ func (p *schemaParser) parseTypeSchema(typ zapi.PayloadType) (schema spec.Schema
 
 	schema.Example = typ.Entity
 
-	switch kind := typ.Kind.String(); typ.Kind {
+	switch typ.Kind {
 	case reflect.Interface:
 		schema.Nullable = true
 	case reflect.Struct:
@@ -215,31 +330,48 @@ func (p *schemaParser) parseTypeSchema(typ zapi.PayloadType) (schema spec.Schema
 		}
 	case reflect.Map:
 		schema.Typed("object", "")
-		schema.SetProperty(".*", p.Parse(p.types[typ.Elements[0].Type]))
+		schema.SetProperty(".*", p.Parse(p.payloads[typ.Elements[0].Type]))
 	case reflect.Slice, reflect.Array:
 		schema.Typed("array", "")
-		itemSchema := p.Parse(p.types[typ.Elements[0].Type])
+		itemSchema := p.Parse(p.payloads[typ.Elements[0].Type])
 		schema.Items = &spec.SchemaOrArray{Schema: &itemSchema}
-	case reflect.Bool:
-		schema.Typed("boolean", "")
-	case reflect.String:
-		schema.Typed("string", "")
-	case reflect.Float32, reflect.Float64:
-		schema.Typed("number", kind)
 	}
 
-	if kind := typ.Kind.String(); strings.Contains(kind, "int") {
-		schema.Typed("integer", kind)
+	if t, format, max, min := parseBasicKind(typ.Kind); len(t) > 0 {
+		if schema.Typed(t, format); max > 0 {
+			schema.WithMaximum(float64(max), false)
+			schema.WithMinimum(float64(min), false)
+		}
+	}
+	return
+}
+
+func parseBasicKind(k reflect.Kind) (typ, format string, max, min float64) {
+	kind := k.String()
+
+	switch k {
+	case reflect.Bool:
+		return "boolean", "", 0, 0
+	case reflect.String:
+		return "string", "", 0, 0
+	case reflect.Float32:
+		return "number", kind, 0, 0
+	case reflect.Float64:
+		return "number", kind, 0, 0
+	}
+
+	if strings.Contains(kind, "int") {
+		typ = "integer"
+		format = kind
 		unsigned := helpers.Btoi[strings.HasPrefix(kind, "u")]
 		size := strconv.IntSize
 		if ss := strings.TrimPrefix(kind[unsigned:], "int"); len(ss) > 0 {
 			size, _ = strconv.Atoi(ss)
 		} else {
-			schema.Format += strconv.Itoa(size)
+			format += strconv.Itoa(size)
 		}
-		max := uintptr(1<<unsigned)<<(size-1) - 1
-		schema.WithMaximum(float64(max), false)
-		schema.WithMinimum(float64(unsigned-1)*float64(max), false)
+		max = float64(uintptr(1<<unsigned)<<(size-1) - 1)
+		min = max * float64(unsigned-1)
 	}
 	return
 }

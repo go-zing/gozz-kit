@@ -10,15 +10,14 @@ import (
 )
 
 func TestParse(t *testing.T) {
-	groups, types := zapi.NewParser(zapi.WithDocFunc(ztest.Docs.TypeFieldDoc)).Parse(ztest.Apis{})
+	groups, payloads := zapi.NewParser(zapi.WithDocFunc(ztest.Docs.TypeFieldDoc)).Parse(ztest.Apis{})
 	fn := zapi.SplitFn("|")
-	swagger := Parse(groups, types, func(api zapi.Api) zapi.HttpApi {
+	swagger := Parse(groups, payloads, func(api zapi.Api) zapi.HttpApi {
 		method, path := fn(api.Resource)
 		return zapi.HttpApi{
-			Api:        api,
-			Method:     method,
-			Path:       path,
-			PathParams: nil,
+			Api:    api,
+			Method: method,
+			Path:   path,
 		}
 	})
 	b, err := json.MarshalIndent(swagger, "", "    ")

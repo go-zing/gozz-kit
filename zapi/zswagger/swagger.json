@@ -74,7 +74,10 @@
                 "sting2",
                 "string",
                 "int",
+                "int64",
                 "uint",
+                "uint16",
+                "int16",
                 "map",
                 "map_pointer",
                 "slice",
@@ -116,13 +119,40 @@
                     "x-order": "3",
                     "example": 0
                 },
+                "int64": {
+                    "type": "integer",
+                    "format": "int64",
+                    "title": "int64 field",
+                    "maximum": 9223372036854776000,
+                    "minimum": -9223372036854776000,
+                    "x-order": "4",
+                    "example": 0
+                },
                 "uint": {
                     "type": "integer",
                     "format": "uint64",
                     "title": "uint field",
                     "maximum": 18446744073709552000,
                     "minimum": 0,
-                    "x-order": "4",
+                    "x-order": "5",
+                    "example": 0
+                },
+                "uint16": {
+                    "type": "integer",
+                    "format": "uint16",
+                    "title": "uint16 field",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "x-order": "6",
+                    "example": 0
+                },
+                "int16": {
+                    "type": "integer",
+                    "format": "int16",
+                    "title": "int16 field",
+                    "maximum": 32767,
+                    "minimum": -32767,
+                    "x-order": "7",
                     "example": 0
                 },
                 "map": {
@@ -133,7 +163,7 @@
                             "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Payload"
                         }
                     },
-                    "x-order": "5",
+                    "x-order": "8",
                     "example": null
                 },
                 "map_pointer": {
@@ -144,7 +174,7 @@
                             "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Payload"
                         }
                     },
-                    "x-order": "6",
+                    "x-order": "9",
                     "example": null
                 },
                 "slice": {
@@ -153,7 +183,7 @@
                     "items": {
                         "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Payload"
                     },
-                    "x-order": "7",
+                    "x-order": "10",
                     "example": null
                 },
                 "slice_pointer": {
@@ -162,7 +192,7 @@
                     "items": {
                         "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Payload"
                     },
-                    "x-order": "8",
+                    "x-order": "11",
                     "example": null
                 },
                 "struct": {
@@ -178,7 +208,7 @@
                             "example": ""
                         }
                     },
-                    "x-order": "9",
+                    "x-order": "12",
                     "example": {
                         "string": ""
                     }
@@ -196,7 +226,7 @@
                             "example": ""
                         }
                     },
-                    "x-order": "10",
+                    "x-order": "13",
                     "example": {
                         "string": ""
                     }
@@ -205,16 +235,16 @@
                     "type": "string",
                     "format": "base64",
                     "title": "bytes field",
-                    "x-order": "11"
+                    "x-order": "14"
                 },
                 "string3": {
                     "type": "string",
-                    "x-order": "12",
+                    "x-order": "15",
                     "example": ""
                 },
                 "string4": {
                     "type": "string",
-                    "x-order": "13",
+                    "x-order": "16",
                     "example": ""
                 },
                 "refer": {
@@ -224,7 +254,7 @@
                             "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Embedded"
                         }
                     ],
-                    "x-order": "14"
+                    "x-order": "17"
                 },
                 "exported": {
                     "title": "exported recursive",
@@ -233,7 +263,7 @@
                             "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Payload"
                         }
                     ],
-                    "x-order": "15"
+                    "x-order": "18"
                 }
             },
             "example": {
@@ -241,7 +271,10 @@
                 "struct2": null,
                 "string": "",
                 "int": 0,
+                "int64": 0,
                 "uint": 0,
+                "uint16": 0,
+                "int16": 0,
                 "map": null,
                 "map_pointer": null,
                 "slice": null,
@@ -268,7 +301,7 @@
             "properties": {
                 "string4": {
                     "type": "string",
-                    "x-order": "13",
+                    "x-order": "16",
                     "example": ""
                 }
             },
@@ -284,7 +317,7 @@
             "properties": {
                 "string3": {
                     "type": "string",
-                    "x-order": "12",
+                    "x-order": "15",
                     "example": ""
                 }
             },

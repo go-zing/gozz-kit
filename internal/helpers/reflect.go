@@ -10,3 +10,5 @@ func IndirectType(rt reflect.Type) reflect.Type {
 	}
 	return rt
 }
+
+var Btoi = map[bool]int{true: 1}

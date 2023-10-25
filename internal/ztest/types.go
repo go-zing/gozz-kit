@@ -37,8 +37,14 @@ type (
 		String string `form:"string" json:"string"`
 		// int field
 		Int int `form:"int" json:"int"`
+		// int64 field
+		Int64 int `form:"int64" json:"int64"`
 		// uint field
 		Uint uint `form:"uint" json:"uint"`
+		// uint16 field
+		Uint16 uint16 `form:"uint16" json:"uint16"`
+		// int16 field
+		Int16 int16 `form:"int16" json:"int16"`
 		// map field
 		Map map[string]Payload `form:"map" json:"map"`
 		// map field with pointer element

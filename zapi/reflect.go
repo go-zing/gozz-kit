@@ -20,8 +20,6 @@ type Parser struct {
 var (
 	rTypeContext = reflect.TypeOf((*context.Context)(nil)).Elem()
 	rTypeError   = reflect.TypeOf((*error)(nil)).Elem()
-
-	btoi = map[bool]int{true: 1}
 )
 
 func (e PayloadElement) CheckFlag(flag int) bool { return e.Flag&flag > 0 }
@@ -77,7 +75,7 @@ func (p *Parser) parseElement(name string, tag reflect.StructTag, rt reflect.Typ
 		Name: name,
 		Tags: parseReflectTag(string(tag)),
 		Type: p.parseType(rt),
-		Flag: btoi[unexported]*flagUnexported | btoi[rt.Kind() == reflect.Ptr]*flagPointer | btoi[anonymous]*flagAnonymous,
+		Flag: helpers.Btoi[unexported]*flagUnexported | helpers.Btoi[rt.Kind() == reflect.Ptr]*flagPointer | helpers.Btoi[anonymous]*flagAnonymous,
 	}
 }
 

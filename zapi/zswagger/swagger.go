@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-openapi/spec"
 
+	"github.com/go-zing/gozz-kit/internal/helpers"
 	"github.com/go-zing/gozz-kit/zapi"
 )
 
@@ -203,9 +204,8 @@ func (p *schemaParser) parseTypeSchema(typ zapi.PayloadType) (schema spec.Schema
 	}
 
 	schema.Example = typ.Entity
-	kind := typ.Kind.String()
 
-	switch typ.Kind {
+	switch kind := typ.Kind.String(); typ.Kind {
 	case reflect.Interface:
 		schema.Nullable = true
 	case reflect.Struct:
@@ -228,24 +228,18 @@ func (p *schemaParser) parseTypeSchema(typ zapi.PayloadType) (schema spec.Schema
 		schema.Typed("number", kind)
 	}
 
-	if strings.Contains(kind, "int") {
+	if kind := typ.Kind.String(); strings.Contains(kind, "int") {
 		schema.Typed("integer", kind)
-		max := uintptr(1)
-		min := float64(-1)
-		if strings.HasPrefix(kind, "u") {
-			kind = kind[1:]
-			max <<= 1
-			min = 0
-		}
+		unsigned := helpers.Btoi[strings.HasPrefix(kind, "u")]
 		size := strconv.IntSize
-		if ss := strings.TrimPrefix(kind, "int"); len(ss) > 0 {
+		if ss := strings.TrimPrefix(kind[unsigned:], "int"); len(ss) > 0 {
 			size, _ = strconv.Atoi(ss)
 		} else {
 			schema.Format += strconv.Itoa(size)
 		}
-		max = max<<(size-1) - 1
+		max := uintptr(1<<unsigned)<<(size-1) - 1
 		schema.WithMaximum(float64(max), false)
-		schema.WithMinimum(min*float64(max), false)
+		schema.WithMinimum(float64(unsigned-1)*float64(max), false)
 	}
 	return
 }

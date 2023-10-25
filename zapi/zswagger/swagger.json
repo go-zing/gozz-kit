@@ -1,0 +1,292 @@
+{
+    "schemes": [
+        "http"
+    ],
+    "swagger": "2.0",
+    "info": {},
+    "paths": {
+        "/": {
+            "post": {
+                "tags": [
+                    "github.com/go-zing/gozz-kit/zapi/internal/ztest.Api"
+                ],
+                "operationId": "github.com/go-zing/gozz-kit/zapi/internal/ztest.Api.Post",
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                        }
+                    }
+                }
+            }
+        },
+        "/{id}": {
+            "get": {
+                "tags": [
+                    "github.com/go-zing/gozz-kit/zapi/internal/ztest.Api"
+                ],
+                "operationId": "github.com/go-zing/gozz-kit/zapi/internal/ztest.Api.Get",
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "github.com_go-zing_gozz-kit_zapi_internal_ztest.Embedded": {
+            "type": "object",
+            "required": [
+                "sting2"
+            ],
+            "properties": {
+                "sting2": {
+                    "type": "string",
+                    "x-order": "0",
+                    "example": ""
+                },
+                "struct2": {
+                    "description": "struct field with pointer element",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                        }
+                    ],
+                    "x-order": "1"
+                }
+            },
+            "example": {
+                "sting2": "",
+                "struct2": null
+            }
+        },
+        "github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload": {
+            "description": "query payload",
+            "type": "object",
+            "required": [
+                "sting2",
+                "string",
+                "int",
+                "uint",
+                "map",
+                "map_pointer",
+                "slice",
+                "slice_pointer",
+                "struct",
+                "bytes",
+                "string3",
+                "string4"
+            ],
+            "properties": {
+                "string3": {
+                    "type": "string",
+                    "x-order": "0",
+                    "example": ""
+                },
+                "string4": {
+                    "type": "string",
+                    "x-order": "0",
+                    "example": ""
+                },
+                "sting2": {
+                    "type": "string",
+                    "x-order": "0",
+                    "example": ""
+                },
+                "struct2": {
+                    "description": "struct field with pointer element",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                        }
+                    ],
+                    "x-order": "1"
+                },
+                "string": {
+                    "description": "string field",
+                    "type": "string",
+                    "x-order": "2",
+                    "example": ""
+                },
+                "int": {
+                    "description": "int field",
+                    "type": "integer",
+                    "format": "int64",
+                    "maximum": 9223372036854776000,
+                    "minimum": -9223372036854776000,
+                    "x-order": "3",
+                    "example": 0
+                },
+                "uint": {
+                    "description": "uint field",
+                    "type": "integer",
+                    "format": "uint64",
+                    "maximum": 18446744073709552000,
+                    "minimum": 0,
+                    "x-order": "4",
+                    "example": 0
+                },
+                "map": {
+                    "description": "map field",
+                    "type": "object",
+                    "properties": {
+                        ".*": {
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                        }
+                    },
+                    "x-order": "5",
+                    "example": null
+                },
+                "map_pointer": {
+                    "description": "map field with pointer element",
+                    "type": "object",
+                    "properties": {
+                        ".*": {
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                        }
+                    },
+                    "x-order": "6",
+                    "example": null
+                },
+                "slice": {
+                    "description": "slice field",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                    },
+                    "x-order": "7",
+                    "example": null
+                },
+                "slice_pointer": {
+                    "description": "slice field with pointer element",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                    },
+                    "x-order": "8",
+                    "example": null
+                },
+                "struct": {
+                    "description": "anonymous struct field",
+                    "type": "object",
+                    "required": [
+                        "string"
+                    ],
+                    "properties": {
+                        "string": {
+                            "type": "string",
+                            "x-order": "0",
+                            "example": ""
+                        }
+                    },
+                    "x-order": "9",
+                    "example": {
+                        "string": ""
+                    }
+                },
+                "struct_pointer": {
+                    "description": "anonymous struct field with pointer element",
+                    "type": "object",
+                    "required": [
+                        "string"
+                    ],
+                    "properties": {
+                        "string": {
+                            "type": "string",
+                            "x-order": "0",
+                            "example": ""
+                        }
+                    },
+                    "x-order": "10",
+                    "example": {
+                        "string": ""
+                    }
+                },
+                "bytes": {
+                    "description": "bytes field",
+                    "type": "array",
+                    "items": {
+                        "type": "integer",
+                        "format": "uint8",
+                        "maximum": 255,
+                        "minimum": 0,
+                        "example": 0
+                    },
+                    "x-order": "11",
+                    "example": null
+                },
+                "exported": {
+                    "description": "exported recursive",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                        }
+                    ],
+                    "x-order": "14"
+                }
+            },
+            "example": {
+                "sting2": "",
+                "struct2": null,
+                "string": "",
+                "int": 0,
+                "uint": 0,
+                "map": null,
+                "map_pointer": null,
+                "slice": null,
+                "slice_pointer": null,
+                "struct": {
+                    "string": ""
+                },
+                "struct_pointer": null,
+                "bytes": null,
+                "string3": "",
+                "string4": "",
+                "exported": null
+            }
+        },
+        "github.com_go-zing_gozz-kit_zapi_internal_ztest.pointerUnexportedEmbedded": {
+            "type": "object",
+            "required": [
+                "string4"
+            ],
+            "properties": {
+                "string4": {
+                    "type": "string",
+                    "x-order": "0",
+                    "example": ""
+                }
+            },
+            "example": {
+                "string4": ""
+            }
+        },
+        "github.com_go-zing_gozz-kit_zapi_internal_ztest.unexportedEmbedded": {
+            "type": "object",
+            "required": [
+                "string3"
+            ],
+            "properties": {
+                "string3": {
+                    "type": "string",
+                    "x-order": "0",
+                    "example": ""
+                }
+            },
+            "example": {
+                "string3": ""
+            }
+        }
+    },
+    "tags": [
+        {
+            "description": "api interface",
+            "name": "github.com/go-zing/gozz-kit/zapi/internal/ztest.Api"
+        }
+    ]
+}

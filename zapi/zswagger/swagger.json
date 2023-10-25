@@ -7,6 +7,7 @@
     "paths": {
         "/": {
             "post": {
+                "description": "post method",
                 "tags": [
                     "github.com/go-zing/gozz-kit/zapi/internal/ztest.Api"
                 ],
@@ -23,6 +24,7 @@
         },
         "/{id}": {
             "get": {
+                "description": "get method",
                 "tags": [
                     "github.com/go-zing/gozz-kit/zapi/internal/ztest.Api"
                 ],
@@ -199,17 +201,10 @@
                     }
                 },
                 "bytes": {
-                    "type": "array",
+                    "type": "string",
+                    "format": "base64",
                     "title": "bytes field",
-                    "items": {
-                        "type": "integer",
-                        "format": "uint8",
-                        "maximum": 255,
-                        "minimum": 0,
-                        "example": 0
-                    },
-                    "x-order": "11",
-                    "example": null
+                    "x-order": "11"
                 },
                 "string3": {
                     "type": "string",

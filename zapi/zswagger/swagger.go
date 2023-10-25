@@ -1,10 +1,14 @@
 package zswagger
 
 import (
+	"encoding/json"
+	"net"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-openapi/spec"
 
@@ -16,11 +20,20 @@ var escapeReplacer = strings.NewReplacer("/", "_")
 func escape(str string) string { return escapeReplacer.Replace(str) }
 
 type schemaParser struct {
-	types       map[int]zapi.PayloadType
+	types       map[reflect.Type]zapi.PayloadType
 	definitions spec.Definitions
 }
 
-func Parse(groups []zapi.ApiGroup, types map[int]zapi.PayloadType, cast func(api zapi.Api) zapi.HttpApi) (swagger *spec.Swagger) {
+var Defined = map[reflect.Type]func(*spec.Schema){
+	reflect.TypeOf(net.IP{}):          func(schema *spec.Schema) { schema.Typed("string", "ipv4") },
+	reflect.TypeOf(time.Time{}):       func(schema *spec.Schema) { schema.Typed("string", "date-time") },
+	reflect.TypeOf(url.URL{}):         func(schema *spec.Schema) { schema.Typed("string", "uri") },
+	reflect.TypeOf([]byte(nil)):       func(schema *spec.Schema) { schema.Typed("string", "base64") },
+	reflect.TypeOf(json.RawMessage{}): func(schema *spec.Schema) { schema.Typed("object", "") },
+	reflect.TypeOf(struct{}{}):        func(schema *spec.Schema) { schema.Typed("null", "") },
+}
+
+func Parse(groups []zapi.ApiGroup, types map[reflect.Type]zapi.PayloadType, cast func(api zapi.Api) zapi.HttpApi) (swagger *spec.Swagger) {
 	swagger = &spec.Swagger{
 		SwaggerProps: spec.SwaggerProps{
 			Info:        &spec.Info{},
@@ -51,8 +64,8 @@ func Parse(groups []zapi.ApiGroup, types map[int]zapi.PayloadType, cast func(api
 	}
 
 	parseResponse := func(api *zapi.HttpApi) (response *spec.Schema) {
-		if api.Result >= 0 {
-			schema := parser.Parse(types[api.Result])
+		if api.Response != nil {
+			schema := parser.Parse(types[api.Response])
 			response = &schema
 		}
 		return
@@ -60,6 +73,7 @@ func Parse(groups []zapi.ApiGroup, types map[int]zapi.PayloadType, cast func(api
 
 	parseOperation := func(group *zapi.ApiGroup, api *zapi.HttpApi) (o spec.Operation) {
 		o.ID = group.Fullname() + "." + api.Name
+		o.Description = api.Doc
 		o.Tags = append(o.Tags, group.Fullname())
 		o.Parameters = parseParams(api)
 		o.RespondsWith(http.StatusOK, spec.NewResponse().WithSchema(parseResponse(api)))
@@ -170,6 +184,11 @@ func (p *schemaParser) parseTypeSchema(typ zapi.PayloadType) (schema spec.Schema
 			p.definitions[name] = schema
 			schema = refSchema(name)
 		}()
+	}
+
+	if define, ok := Defined[typ.Type]; ok {
+		define(&schema)
+		return
 	}
 
 	schema.WithExample(typ.Entity)

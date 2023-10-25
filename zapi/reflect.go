@@ -53,7 +53,6 @@ func (p *Parser) getType(rt reflect.Type) (typ *PayloadType, exist bool) {
 	}
 
 	p.types[rt] = &PayloadType{
-		Id:      len(p.types),
 		Kind:    rt.Kind(),
 		Type:    rt,
 		Name:    rt.Name(),
@@ -86,19 +85,19 @@ func indirectType(rt reflect.Type) reflect.Type {
 	return rt
 }
 
-func (p *Parser) parseFuncPayload(ft reflect.Type) (int, int) {
+func (p *Parser) parseFuncPayload(ft reflect.Type) (reflect.Type, reflect.Type) {
 	param, result := funcPayload(ft)
 	return p.parseType(param), p.parseType(result)
 }
 
-func (p *Parser) parseType(rt reflect.Type) (id int) {
+func (p *Parser) parseType(rt reflect.Type) reflect.Type {
 	if rt == nil {
-		return -1
+		return nil
 	}
 	rt = indirectType(rt)
 	typ, exist := p.getType(rt)
-	if id = typ.Id; exist {
-		return
+	if exist {
+		return rt
 	}
 	switch rt.Kind() {
 	case reflect.Struct:
@@ -111,7 +110,7 @@ func (p *Parser) parseType(rt reflect.Type) (id int) {
 	case reflect.Map, reflect.Array, reflect.Slice:
 		typ.Elements = append(typ.Elements, p.parseElement("", "", rt.Elem(), false, false))
 	}
-	return
+	return rt
 }
 
 func funcPayload(ft reflect.Type) (param, result reflect.Type) {

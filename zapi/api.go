@@ -2,7 +2,6 @@ package zapi
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"strings"
 )
@@ -16,8 +15,8 @@ type (
 		Resource string
 		Options  map[string]string
 		Invoke   InvokeFunc
-		Param    int
-		Result   int
+		Param    reflect.Type
+		Response reflect.Type
 	}
 
 	ApiGroup struct {
@@ -40,7 +39,6 @@ type (
 	}
 
 	PayloadType struct {
-		Id       int
 		Kind     reflect.Kind
 		Type     reflect.Type
 		Name     string
@@ -51,7 +49,7 @@ type (
 	}
 
 	PayloadElement struct {
-		Type int
+		Type reflect.Type
 		Flag int
 		Name string
 		Doc  string
@@ -82,7 +80,7 @@ func (typ PayloadType) Fullname() string {
 	if len(typ.Name) > 0 {
 		return typ.Name
 	}
-	return fmt.Sprintf("anonymous_%s_%d", typ.Kind, typ.Id)
+	return ""
 }
 
 func SplitFn(sep string) func(resource string) (method, path string) {
@@ -102,7 +100,7 @@ func (p *Parser) parseApi(rt reflect.Type, spec map[string]interface{}) (api Api
 		return
 	}
 	api.Doc = p.getFieldDoc(rt, api.Name)
-	api.Param, api.Result = p.parseFuncPayload(fm.Type)
+	api.Param, api.Response = p.parseFuncPayload(fm.Type)
 	api.Resource, _ = spec["resource"].(string)
 	api.Options, _ = spec["options"].(map[string]string)
 	api.Invoke, _ = spec["invoke"].(InvokeFunc)
@@ -126,14 +124,14 @@ func (p *Parser) parseApiGroup(handler interface{}, specs []map[string]interface
 	return group
 }
 
-func (p *Parser) Parse(iterator Iterator) (groups []ApiGroup, payloads map[int]PayloadType) {
+func (p *Parser) Parse(iterator Iterator) (groups []ApiGroup, payloads map[reflect.Type]PayloadType) {
 	iterator.Iterate(func(handler interface{}, specs []map[string]interface{}) {
 		groups = append(groups, p.parseApiGroup(handler, specs))
 	})
 
-	payloads = make(map[int]PayloadType, len(p.types))
+	payloads = make(map[reflect.Type]PayloadType, len(p.types))
 	for _, typ := range p.types {
-		payloads[typ.Id] = *typ
+		payloads[typ.Type] = *typ
 	}
 	return
 }

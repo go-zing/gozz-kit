@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 //go:generate gozz run -p "option" ./
@@ -103,7 +104,7 @@ func (p *Parser) parseType(rt reflect.Type) reflect.Type {
 	case reflect.Struct:
 		n := rt.NumField()
 		for i := 0; i < n; i++ {
-			if fi := rt.Field(i); len(fi.PkgPath) == 0 || (fi.Anonymous && fi.Type.Kind() != reflect.Ptr) {
+			if fi := rt.Field(i); len(fi.PkgPath) == 0 || (fi.Anonymous && fi.Type.Kind() == reflect.Struct) {
 				typ.Elements = append(typ.Elements, p.parseFieldElement(rt, fi))
 			}
 		}
@@ -134,14 +135,20 @@ func funcPayload(ft reflect.Type) (param, result reflect.Type) {
 	return
 }
 
-type StructTag struct {
-	Key   string
-	Value string
-}
+type (
+	StructTag struct {
+		Key   string
+		Value TagValue
+	}
 
-type StructTags []StructTag
+	StructTags []StructTag
 
-func (tags StructTags) Lookup(key string) (value string, found bool) {
+	TagValue string
+
+	TagValues []string
+)
+
+func (tags StructTags) Lookup(key string) (value TagValue, found bool) {
 	for i := range tags {
 		if tags[i].Key == key {
 			return tags[i].Value, true
@@ -150,9 +157,22 @@ func (tags StructTags) Lookup(key string) (value string, found bool) {
 	return
 }
 
-func (tags StructTags) Get(key string) (value string) {
+func (tags StructTags) Get(key string) (value TagValue) {
 	value, _ = tags.Lookup(key)
 	return
+}
+
+func (value TagValue) Split(Sep string) TagValues {
+	return strings.Split(string(value), Sep)
+}
+
+func (values TagValues) Exist(option string) bool {
+	for _, v := range values {
+		if option == v {
+			return true
+		}
+	}
+	return false
 }
 
 func parseReflectTag(tag string) (tags StructTags) {
@@ -192,7 +212,7 @@ func parseReflectTag(tag string) (tags StructTags) {
 		if value, err := strconv.Unquote(tag[:i+1]); err == nil {
 			tags = append(tags, StructTag{
 				Key:   key,
-				Value: value,
+				Value: TagValue(value),
 			})
 			tag = tag[i+1:]
 		}

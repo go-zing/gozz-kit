@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -81,9 +82,7 @@ func Parse(groups []zapi.ApiGroup, types map[reflect.Type]zapi.PayloadType, cast
 	}
 
 	for _, group := range groups {
-		swagger.Tags = append(swagger.Tags,
-			spec.NewTag(group.Fullname(), group.Doc, nil),
-		)
+		swagger.Tags = append(swagger.Tags, spec.NewTag(group.Fullname(), group.Doc, nil))
 
 		for _, api := range group.Apis {
 			h := cast(api)
@@ -95,7 +94,10 @@ func Parse(groups []zapi.ApiGroup, types map[reflect.Type]zapi.PayloadType, cast
 	return
 }
 
-const definitionsPrefix = "#/definitions/"
+const (
+	definitionsPrefix = "#/definitions/"
+	extensionKeyOrder = "x-order"
+)
 
 func refSchema(name string) spec.Schema {
 	return spec.Schema{
@@ -118,32 +120,44 @@ func (p *schemaParser) parseEmbedProperties(ele zapi.PayloadElement, schema *spe
 	if ref := embed.Ref.String(); len(ref) > 0 {
 		embed = p.definitions[strings.TrimPrefix(ref, definitionsPrefix)]
 	}
-	required := make(map[string]bool)
+	required := make(map[string]bool, len(embed.Required))
 	for _, req := range embed.Required {
-		required[req] = true
+		required[req] = !ele.IsPointer()
 	}
-	for key, property := range embed.Properties {
+	keys := make([]string, 0, len(embed.Properties))
+	for key := range embed.Properties {
 		if _, exist := schema.Properties[key]; !exist {
-			property.AddExtension("x-order", strconv.Itoa(len(schema.Properties)))
-			if schema.SetProperty(key, property); !ele.IsPointer() && required[key] {
-				schema.AddRequired(key)
-			}
+			keys = append(keys, key)
 		}
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		orderI, _ := embed.Properties[keys[i]].Extensions.GetInt(extensionKeyOrder)
+		orderJ, _ := embed.Properties[keys[j]].Extensions.GetInt(extensionKeyOrder)
+		return orderI < orderJ
+	})
+	for _, key := range keys {
+		property := embed.Properties[key]
+		addElementProperty(schema, &property, key, required[key])
+	}
+}
+
+func addElementProperty(dst, property *spec.Schema, key string, required bool) {
+	property.AddExtension(extensionKeyOrder, strconv.Itoa(len(dst.Properties)))
+	if dst.SetProperty(key, *property); required {
+		dst.AddRequired(key)
 	}
 }
 
 func (p *schemaParser) parseElementProperty(ele zapi.PayloadElement, schema *spec.Schema) {
-	tag := ele.Tags.Get("json")
-	key := strings.Split(tag, ",")[0]
+	values := ele.Tags.Get("json").Split(",")
+	omitempty := values.Exist("omitempty")
+	key := values[0]
 	typ := p.types[ele.Type]
-	embedded := ele.IsAnonymous() && typ.Kind == reflect.Struct
 
 	if key == "-" {
 		return
-	} else if embedded && len(key) == 0 {
+	} else if ele.IsAnonymous() && typ.Kind == reflect.Struct && len(key) == 0 {
 		p.parseEmbedProperties(ele, schema)
-		return
-	} else if !embedded && ele.IsUnexported() {
 		return
 	} else if len(key) == 0 {
 		key = ele.Name
@@ -151,16 +165,11 @@ func (p *schemaParser) parseElementProperty(ele zapi.PayloadElement, schema *spe
 
 	property := p.Parse(typ)
 	setSchemaDoc(&property, ele.Doc)
-
 	if ref := property.Ref; len(ref.String()) > 0 {
 		property.Ref = spec.Ref{}
 		property.AddToAllOf(spec.Schema{SchemaProps: spec.SchemaProps{Ref: ref}})
 	}
-
-	property.AddExtension("x-order", strconv.Itoa(len(schema.Properties)))
-	if schema.SetProperty(key, property); !ele.IsPointer() {
-		schema.AddRequired(key)
-	}
+	addElementProperty(schema, &property, key, !ele.IsPointer() && !omitempty)
 }
 
 func isStandardPackage(pkg string) bool {

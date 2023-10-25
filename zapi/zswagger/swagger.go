@@ -25,7 +25,7 @@ type schemaParser struct {
 	definitions spec.Definitions
 }
 
-var Defined = map[reflect.Type]func(*spec.Schema){
+var defined = map[reflect.Type]func(*spec.Schema){
 	reflect.TypeOf(net.IP{}):          func(schema *spec.Schema) { schema.Typed("string", "ipv4") },
 	reflect.TypeOf(time.Time{}):       func(schema *spec.Schema) { schema.Typed("string", "date-time") },
 	reflect.TypeOf(url.URL{}):         func(schema *spec.Schema) { schema.Typed("string", "uri") },
@@ -33,6 +33,8 @@ var Defined = map[reflect.Type]func(*spec.Schema){
 	reflect.TypeOf(json.RawMessage{}): func(schema *spec.Schema) { schema.Typed("object", "") },
 	reflect.TypeOf(struct{}{}):        func(schema *spec.Schema) { schema.Typed("null", "") },
 }
+
+func RegisterSchemaType(typ reflect.Type, fn func(*spec.Schema)) { defined[typ] = fn }
 
 func Parse(groups []zapi.ApiGroup, types map[reflect.Type]zapi.PayloadType, cast func(api zapi.Api) zapi.HttpApi) (swagger *spec.Swagger) {
 	swagger = &spec.Swagger{
@@ -177,10 +179,7 @@ func isStandardPackage(pkg string) bool {
 }
 
 func setSchemaDoc(schema *spec.Schema, doc string) {
-	sp := strings.SplitN(doc, "\n", 2)
-	if len(sp) == 1 {
-		sp = append(sp, "")
-	}
+	sp := strings.SplitN(doc, "\n", 2)[:2]
 	schema.WithTitle(strings.TrimSpace(sp[0]))
 	schema.WithDescription(strings.TrimSpace(sp[1]))
 }
@@ -195,14 +194,15 @@ func (p *schemaParser) parseTypeSchema(typ zapi.PayloadType) (schema spec.Schema
 		}()
 	}
 
-	if define, ok := Defined[typ.Type]; ok {
-		define(&schema)
-		return
-	}
-
-	schema.WithExample(typ.Entity)
 	setSchemaDoc(&schema, typ.Doc)
 
+	if define, ok := defined[typ.Type]; ok {
+		if define(&schema); len(schema.Type) > 0 {
+			return
+		}
+	}
+
+	schema.Example = typ.Entity
 	kind := typ.Kind.String()
 
 	switch typ.Kind {

@@ -9,14 +9,14 @@
             "post": {
                 "description": "post method",
                 "tags": [
-                    "github.com/go-zing/gozz-kit/zapi/internal/ztest.Api"
+                    "github.com/go-zing/gozz-kit/internal/ztest.Api"
                 ],
-                "operationId": "github.com/go-zing/gozz-kit/zapi/internal/ztest.Api.Post",
+                "operationId": "github.com/go-zing/gozz-kit/internal/ztest.Api.Post",
                 "responses": {
                     "200": {
                         "description": "",
                         "schema": {
-                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Payload"
                         }
                     }
                 }
@@ -26,14 +26,14 @@
             "get": {
                 "description": "get method",
                 "tags": [
-                    "github.com/go-zing/gozz-kit/zapi/internal/ztest.Api"
+                    "github.com/go-zing/gozz-kit/internal/ztest.Api"
                 ],
-                "operationId": "github.com/go-zing/gozz-kit/zapi/internal/ztest.Api.Get",
+                "operationId": "github.com/go-zing/gozz-kit/internal/ztest.Api.Get",
                 "responses": {
                     "200": {
                         "description": "",
                         "schema": {
-                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Payload"
                         }
                     }
                 }
@@ -41,7 +41,7 @@
         }
     },
     "definitions": {
-        "github.com_go-zing_gozz-kit_zapi_internal_ztest.Embedded": {
+        "github.com_go-zing_gozz-kit_internal_ztest.Embedded": {
             "type": "object",
             "required": [
                 "sting2"
@@ -56,7 +56,7 @@
                     "title": "struct field with pointer element",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Payload"
                         }
                     ],
                     "x-order": "1"
@@ -67,7 +67,7 @@
                 "struct2": null
             }
         },
-        "github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload": {
+        "github.com_go-zing_gozz-kit_internal_ztest.Payload": {
             "type": "object",
             "title": "query payload",
             "required": [
@@ -95,12 +95,13 @@
                     "title": "struct field with pointer element",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Payload"
                         }
                     ],
                     "x-order": "1"
                 },
                 "string": {
+                    "description": "multi line doc",
                     "type": "string",
                     "title": "string field",
                     "x-order": "2",
@@ -129,7 +130,7 @@
                     "title": "map field",
                     "properties": {
                         ".*": {
-                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Payload"
                         }
                     },
                     "x-order": "5",
@@ -140,7 +141,7 @@
                     "title": "map field with pointer element",
                     "properties": {
                         ".*": {
-                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Payload"
                         }
                     },
                     "x-order": "6",
@@ -150,7 +151,7 @@
                     "type": "array",
                     "title": "slice field",
                     "items": {
-                        "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                        "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Payload"
                     },
                     "x-order": "7",
                     "example": null
@@ -159,7 +160,7 @@
                     "type": "array",
                     "title": "slice field with pointer element",
                     "items": {
-                        "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                        "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Payload"
                     },
                     "x-order": "8",
                     "example": null
@@ -220,7 +221,7 @@
                     "title": "refer struct",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Embedded"
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Embedded"
                         }
                     ],
                     "x-order": "14"
@@ -229,7 +230,7 @@
                     "title": "exported recursive",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Payload"
                         }
                     ],
                     "x-order": "15"
@@ -259,7 +260,7 @@
                 "exported": null
             }
         },
-        "github.com_go-zing_gozz-kit_zapi_internal_ztest.pointerUnexportedEmbedded": {
+        "github.com_go-zing_gozz-kit_internal_ztest.pointerUnexportedEmbedded": {
             "type": "object",
             "required": [
                 "string4"
@@ -275,7 +276,7 @@
                 "string4": ""
             }
         },
-        "github.com_go-zing_gozz-kit_zapi_internal_ztest.unexportedEmbedded": {
+        "github.com_go-zing_gozz-kit_internal_ztest.unexportedEmbedded": {
             "type": "object",
             "required": [
                 "string3"
@@ -295,7 +296,7 @@
     "tags": [
         {
             "description": "api interface",
-            "name": "github.com/go-zing/gozz-kit/zapi/internal/ztest.Api"
+            "name": "github.com/go-zing/gozz-kit/internal/ztest.Api"
         }
     ]
 }

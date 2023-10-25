@@ -5,8 +5,8 @@ import (
 	"io/ioutil"
 	"testing"
 
+	"github.com/go-zing/gozz-kit/internal/ztest"
 	"github.com/go-zing/gozz-kit/zapi"
-	"github.com/go-zing/gozz-kit/zapi/internal/ztest"
 )
 
 func TestParse(t *testing.T) {

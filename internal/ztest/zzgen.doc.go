@@ -17,7 +17,8 @@ var (
 
 	_doc_Payload = map[string]string{
 		"":              "query payload",
-		"String":        "string field",
+		"Embedded":      "embedded field",
+		"String":        "string field\nmulti line doc",
 		"Int":           "int field",
 		"Uint":          "uint field",
 		"Map":           "map field",

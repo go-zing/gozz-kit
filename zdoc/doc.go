@@ -3,6 +3,8 @@ package zdoc
 import (
 	"reflect"
 	"sync"
+
+	"github.com/go-zing/gozz-kit/internal/helpers"
 )
 
 type Docs struct {
@@ -11,15 +13,8 @@ type Docs struct {
 	values map[string]map[interface{}]string
 }
 
-func indirectType(rt reflect.Type) reflect.Type {
-	for rt.Kind() == reflect.Ptr {
-		rt = rt.Elem()
-	}
-	return rt
-}
-
 func (d *Docs) TypeFieldDoc(rt reflect.Type, field string) string {
-	rt = indirectType(rt)
+	rt = helpers.IndirectType(rt)
 	d.mu.Lock()
 	m := d.types[rt]
 	d.mu.Unlock()
@@ -33,6 +28,6 @@ func (d *Docs) LoadTypes(types map[interface{}]map[string]string) {
 		d.types = make(map[reflect.Type]map[string]string)
 	}
 	for k, m := range types {
-		d.types[indirectType(reflect.TypeOf(k))] = m
+		d.types[helpers.IndirectType(reflect.TypeOf(k))] = m
 	}
 }

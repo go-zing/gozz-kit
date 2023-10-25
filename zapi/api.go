@@ -4,6 +4,8 @@ import (
 	"context"
 	"reflect"
 	"strings"
+
+	"github.com/go-zing/gozz-kit/internal/helpers"
 )
 
 type (
@@ -108,7 +110,7 @@ func (p *Parser) parseApi(rt reflect.Type, spec map[string]interface{}) (api Api
 }
 
 func (p *Parser) parseApiGroup(handler interface{}, specs []map[string]interface{}) ApiGroup {
-	rt := indirectType(reflect.TypeOf(handler))
+	rt := helpers.IndirectType(reflect.TypeOf(handler))
 	group := ApiGroup{
 		Handler: handler,
 		Package: rt.PkgPath(),

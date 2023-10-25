@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/go-zing/gozz-kit/internal/helpers"
 )
 
 //go:generate gozz run -p "option" ./
@@ -79,13 +81,6 @@ func (p *Parser) parseElement(name string, tag reflect.StructTag, rt reflect.Typ
 	}
 }
 
-func indirectType(rt reflect.Type) reflect.Type {
-	for rt.Kind() == reflect.Ptr {
-		rt = rt.Elem()
-	}
-	return rt
-}
-
 func (p *Parser) parseFuncPayload(ft reflect.Type) (reflect.Type, reflect.Type) {
 	param, result := funcPayload(ft)
 	return p.parseType(param), p.parseType(result)
@@ -95,7 +90,7 @@ func (p *Parser) parseType(rt reflect.Type) reflect.Type {
 	if rt == nil {
 		return nil
 	}
-	rt = indirectType(rt)
+	rt = helpers.IndirectType(rt)
 	typ, exist := p.getType(rt)
 	if exist {
 		return rt

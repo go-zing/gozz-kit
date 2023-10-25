@@ -30,8 +30,10 @@ type (
 
 	// query payload
 	Payload struct {
+		// embedded field
 		Embedded
 		// string field
+		// multi line doc
 		String string `form:"string" json:"string"`
 		// int field
 		Int int `form:"int" json:"int"`

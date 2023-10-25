@@ -60,6 +60,9 @@ type (
 
 		pointerUnexportedEmbedded
 
+		// refer struct
+		Refer Embedded `form:"refer" json:"refer"`
+
 		// exported recursive
 		Exported *Payload `form:"exported" json:"exported"`
 

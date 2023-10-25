@@ -51,7 +51,7 @@
                     "example": ""
                 },
                 "struct2": {
-                    "description": "struct field with pointer element",
+                    "title": "struct field with pointer element",
                     "allOf": [
                         {
                             "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
@@ -66,8 +66,8 @@
             }
         },
         "github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload": {
-            "description": "query payload",
             "type": "object",
+            "title": "query payload",
             "required": [
                 "sting2",
                 "string",
@@ -80,26 +80,17 @@
                 "struct",
                 "bytes",
                 "string3",
-                "string4"
+                "string4",
+                "refer"
             ],
             "properties": {
-                "string3": {
-                    "type": "string",
-                    "x-order": "0",
-                    "example": ""
-                },
-                "string4": {
-                    "type": "string",
-                    "x-order": "0",
-                    "example": ""
-                },
                 "sting2": {
                     "type": "string",
                     "x-order": "0",
                     "example": ""
                 },
                 "struct2": {
-                    "description": "struct field with pointer element",
+                    "title": "struct field with pointer element",
                     "allOf": [
                         {
                             "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
@@ -108,32 +99,32 @@
                     "x-order": "1"
                 },
                 "string": {
-                    "description": "string field",
                     "type": "string",
+                    "title": "string field",
                     "x-order": "2",
                     "example": ""
                 },
                 "int": {
-                    "description": "int field",
                     "type": "integer",
                     "format": "int64",
+                    "title": "int field",
                     "maximum": 9223372036854776000,
                     "minimum": -9223372036854776000,
                     "x-order": "3",
                     "example": 0
                 },
                 "uint": {
-                    "description": "uint field",
                     "type": "integer",
                     "format": "uint64",
+                    "title": "uint field",
                     "maximum": 18446744073709552000,
                     "minimum": 0,
                     "x-order": "4",
                     "example": 0
                 },
                 "map": {
-                    "description": "map field",
                     "type": "object",
+                    "title": "map field",
                     "properties": {
                         ".*": {
                             "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
@@ -143,8 +134,8 @@
                     "example": null
                 },
                 "map_pointer": {
-                    "description": "map field with pointer element",
                     "type": "object",
+                    "title": "map field with pointer element",
                     "properties": {
                         ".*": {
                             "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
@@ -154,8 +145,8 @@
                     "example": null
                 },
                 "slice": {
-                    "description": "slice field",
                     "type": "array",
+                    "title": "slice field",
                     "items": {
                         "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
                     },
@@ -163,8 +154,8 @@
                     "example": null
                 },
                 "slice_pointer": {
-                    "description": "slice field with pointer element",
                     "type": "array",
+                    "title": "slice field with pointer element",
                     "items": {
                         "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
                     },
@@ -172,8 +163,8 @@
                     "example": null
                 },
                 "struct": {
-                    "description": "anonymous struct field",
                     "type": "object",
+                    "title": "anonymous struct field",
                     "required": [
                         "string"
                     ],
@@ -190,8 +181,8 @@
                     }
                 },
                 "struct_pointer": {
-                    "description": "anonymous struct field with pointer element",
                     "type": "object",
+                    "title": "anonymous struct field with pointer element",
                     "required": [
                         "string"
                     ],
@@ -208,8 +199,8 @@
                     }
                 },
                 "bytes": {
-                    "description": "bytes field",
                     "type": "array",
+                    "title": "bytes field",
                     "items": {
                         "type": "integer",
                         "format": "uint8",
@@ -220,14 +211,33 @@
                     "x-order": "11",
                     "example": null
                 },
+                "string3": {
+                    "type": "string",
+                    "x-order": "12",
+                    "example": ""
+                },
+                "string4": {
+                    "type": "string",
+                    "x-order": "13",
+                    "example": ""
+                },
+                "refer": {
+                    "title": "refer struct",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Embedded"
+                        }
+                    ],
+                    "x-order": "14"
+                },
                 "exported": {
-                    "description": "exported recursive",
+                    "title": "exported recursive",
                     "allOf": [
                         {
                             "$ref": "#/definitions/github.com_go-zing_gozz-kit_zapi_internal_ztest.Payload"
                         }
                     ],
-                    "x-order": "14"
+                    "x-order": "15"
                 }
             },
             "example": {
@@ -247,6 +257,10 @@
                 "bytes": null,
                 "string3": "",
                 "string4": "",
+                "refer": {
+                    "sting2": "",
+                    "struct2": null
+                },
                 "exported": null
             }
         },
@@ -258,7 +272,7 @@
             "properties": {
                 "string4": {
                     "type": "string",
-                    "x-order": "0",
+                    "x-order": "13",
                     "example": ""
                 }
             },
@@ -274,7 +288,7 @@
             "properties": {
                 "string3": {
                     "type": "string",
-                    "x-order": "0",
+                    "x-order": "12",
                     "example": ""
                 }
             },

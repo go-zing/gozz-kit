@@ -54,7 +54,8 @@ func (p *Parser) getType(rt reflect.Type) (typ *PayloadType, exist bool) {
 
 	p.types[rt] = &PayloadType{
 		Id:      len(p.types),
-		Kind:    rt.Kind().String(),
+		Kind:    rt.Kind(),
+		Type:    rt,
 		Name:    rt.Name(),
 		Package: rt.PkgPath(),
 		Doc:     p.getFieldDoc(rt, ""),

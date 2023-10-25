@@ -27,6 +27,7 @@ var (
 		"Struct":        "anonymous struct field",
 		"StructPointer": "anonymous struct field with pointer element",
 		"Bytes":         "bytes field",
+		"Refer":         "refer struct",
 		"Exported":      "exported recursive",
 		"unexported":    "unexported recursive",
 	}

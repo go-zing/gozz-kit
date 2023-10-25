@@ -52,7 +52,8 @@ func Parse(groups []zapi.ApiGroup, types map[int]zapi.PayloadType, cast func(api
 
 	parseResponse := func(api *zapi.HttpApi) (response *spec.Schema) {
 		if api.Result >= 0 {
-			response = parser.Parse(types[api.Result])
+			schema := parser.Parse(types[api.Result])
+			response = &schema
 		}
 		return
 	}
@@ -80,15 +81,17 @@ func Parse(groups []zapi.ApiGroup, types map[int]zapi.PayloadType, cast func(api
 	return
 }
 
-func refSchema(name string) *spec.Schema {
-	return &spec.Schema{
+const definitionsPrefix = "#/definitions/"
+
+func refSchema(name string) spec.Schema {
+	return spec.Schema{
 		SchemaProps: spec.SchemaProps{
-			Ref: spec.MustCreateRef("#/definitions/" + name),
+			Ref: spec.MustCreateRef(definitionsPrefix + name),
 		},
 	}
 }
 
-func (p *schemaParser) Parse(typ zapi.PayloadType) (schema *spec.Schema) {
+func (p *schemaParser) Parse(typ zapi.PayloadType) (schema spec.Schema) {
 	name := escape(typ.Fullname())
 	if _, ok := p.definitions[name]; ok {
 		return refSchema(name)
@@ -98,21 +101,18 @@ func (p *schemaParser) Parse(typ zapi.PayloadType) (schema *spec.Schema) {
 
 func (p *schemaParser) parseEmbedProperties(ele zapi.PayloadElement, schema *spec.Schema) {
 	embed := p.Parse(p.types[ele.Type])
-
 	if ref := embed.Ref.String(); len(ref) > 0 {
-		v, _ := p.definitions[strings.TrimPrefix(ref, "#/definitions/")]
-		embed = &v
+		embed = p.definitions[strings.TrimPrefix(ref, definitionsPrefix)]
 	}
-
 	required := make(map[string]bool)
 	for _, req := range embed.Required {
 		required[req] = true
 	}
-
-	for k, v := range embed.Properties {
-		if _, exist := schema.Properties[k]; !exist {
-			if schema.SetProperty(k, v); !ele.IsPointer() && required[k] {
-				schema.AddRequired(k)
+	for key, property := range embed.Properties {
+		if _, exist := schema.Properties[key]; !exist {
+			property.AddExtension("x-order", strconv.Itoa(len(schema.Properties)))
+			if schema.SetProperty(key, property); !ele.IsPointer() && required[key] {
+				schema.AddRequired(key)
 			}
 		}
 	}
@@ -122,7 +122,7 @@ func (p *schemaParser) parseElementProperty(ele zapi.PayloadElement, schema *spe
 	tag := ele.Tags.Get("json")
 	key := strings.Split(tag, ",")[0]
 	typ := p.types[ele.Type]
-	embedded := ele.IsAnonymous() && typ.Kind == "struct"
+	embedded := ele.IsAnonymous() && typ.Kind == reflect.Struct
 
 	if key == "-" {
 		return
@@ -136,15 +136,15 @@ func (p *schemaParser) parseElementProperty(ele zapi.PayloadElement, schema *spe
 	}
 
 	property := p.Parse(typ)
-	property.WithDescription(ele.Doc)
-	property.AddExtension("x-order", strconv.Itoa(len(schema.Properties)))
+	setSchemaDoc(&property, ele.Doc)
 
 	if ref := property.Ref; len(ref.String()) > 0 {
 		property.Ref = spec.Ref{}
 		property.AddToAllOf(spec.Schema{SchemaProps: spec.SchemaProps{Ref: ref}})
 	}
 
-	if schema.SetProperty(key, *property); !ele.IsPointer() {
+	property.AddExtension("x-order", strconv.Itoa(len(schema.Properties)))
+	if schema.SetProperty(key, property); !ele.IsPointer() {
 		schema.AddRequired(key)
 	}
 }
@@ -153,42 +153,54 @@ func isStandardPackage(pkg string) bool {
 	return !strings.Contains(strings.SplitN(pkg, "/", 2)[0], ".")
 }
 
-func (p *schemaParser) parseTypeSchema(typ zapi.PayloadType) (schema *spec.Schema) {
-	if schema = new(spec.Schema); len(typ.Package) > 0 && !isStandardPackage(typ.Package) {
+func setSchemaDoc(schema *spec.Schema, doc string) {
+	sp := strings.SplitN(doc, "\n", 2)
+	if len(sp) == 1 {
+		sp = append(sp, "")
+	}
+	schema.WithTitle(strings.TrimSpace(sp[0]))
+	schema.WithDescription(strings.TrimSpace(sp[1]))
+}
+
+func (p *schemaParser) parseTypeSchema(typ zapi.PayloadType) (schema spec.Schema) {
+	if len(typ.Package) > 0 && !isStandardPackage(typ.Package) {
 		name := escape(typ.Fullname())
-		p.definitions[name] = *schema
+		p.definitions[name] = schema
 		defer func() {
-			p.definitions[name] = *schema
-			*schema = *refSchema(name)
+			p.definitions[name] = schema
+			schema = refSchema(name)
 		}()
 	}
 
 	schema.WithExample(typ.Entity)
-	schema.WithDescription(typ.Doc)
+	setSchemaDoc(&schema, typ.Doc)
+
+	kind := typ.Kind.String()
 
 	switch typ.Kind {
-	case "interface":
+	case reflect.Interface:
 		schema.Nullable = true
-	case "struct":
+	case reflect.Struct:
 		schema.Typed("object", "")
 		for _, ele := range typ.Elements {
-			p.parseElementProperty(ele, schema)
+			p.parseElementProperty(ele, &schema)
 		}
-	case "map":
+	case reflect.Map:
 		schema.Typed("object", "")
-		schema.SetProperty(".*", *p.Parse(p.types[typ.Elements[0].Type]))
-	case "array", "slice":
+		schema.SetProperty(".*", p.Parse(p.types[typ.Elements[0].Type]))
+	case reflect.Slice, reflect.Array:
 		schema.Typed("array", "")
-		schema.Items = &spec.SchemaOrArray{Schema: p.Parse(p.types[typ.Elements[0].Type])}
-	case "bool":
+		itemSchema := p.Parse(p.types[typ.Elements[0].Type])
+		schema.Items = &spec.SchemaOrArray{Schema: &itemSchema}
+	case reflect.Bool:
 		schema.Typed("boolean", "")
-	case "string":
+	case reflect.String:
 		schema.Typed("string", "")
-	case "float32", "float64":
-		schema.Typed("number", typ.Kind)
+	case reflect.Float32, reflect.Float64:
+		schema.Typed("number", kind)
 	}
 
-	if kind := typ.Kind; strings.Contains(kind, "int") {
+	if strings.Contains(kind, "int") {
 		schema.Typed("integer", kind)
 		max := uintptr(1)
 		min := float64(-1)

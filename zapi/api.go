@@ -41,7 +41,8 @@ type (
 
 	PayloadType struct {
 		Id       int
-		Kind     string
+		Kind     reflect.Kind
+		Type     reflect.Type
 		Name     string
 		Package  string
 		Doc      string

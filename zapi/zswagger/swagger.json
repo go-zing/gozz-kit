@@ -12,6 +12,15 @@
                     "github.com/go-zing/gozz-kit/internal/ztest.Api"
                 ],
                 "operationId": "github.com/go-zing/gozz-kit/internal/ztest.Api.Post",
+                "parameters": [
+                    {
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/github.com_go-zing_gozz-kit_internal_ztest.Payload"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "",

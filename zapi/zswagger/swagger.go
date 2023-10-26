@@ -44,7 +44,7 @@ func escape(str string) string { return escapeReplacer.Replace(str) }
 type (
 	schemaParser struct {
 		option      Option
-		payloads    map[reflect.Type]zapi.PayloadType
+		payloads    map[reflect.Type]*zapi.PayloadType
 		definitions spec.Definitions
 	}
 
@@ -52,6 +52,7 @@ type (
 	Option struct {
 		HttpCast func(api zapi.Api) zapi.HttpApi
 		Bindings map[string]Binding
+		DocFunc  func(reflect.Type, string) string
 	}
 
 	Binding struct {
@@ -84,7 +85,7 @@ func parseBinding(api *zapi.HttpApi, rules map[string]Binding) Binding {
 	return rule
 }
 
-func parseElements(payloads map[reflect.Type]zapi.PayloadType, root zapi.PayloadType, tag string, fn func(zapi.PayloadElement, zapi.TagValues)) {
+func parseElements(payloads map[reflect.Type]*zapi.PayloadType, root *zapi.PayloadType, tag string, fn func(zapi.PayloadElement, zapi.TagValues)) {
 	if len(tag) == 0 {
 		return
 	}
@@ -115,7 +116,7 @@ func setOperation(paths map[string]spec.PathItem, method, path string, operate s
 	}
 }
 
-func Parse(groups []zapi.ApiGroup, payloads map[reflect.Type]zapi.PayloadType, option ...func(*Option)) (swagger *spec.Swagger) {
+func Parse(iterator zapi.Iterator, option ...func(*Option)) (swagger *spec.Swagger) {
 	swagger = &spec.Swagger{
 		SwaggerProps: spec.SwaggerProps{
 			Info:        &spec.Info{},
@@ -126,8 +127,10 @@ func Parse(groups []zapi.ApiGroup, payloads map[reflect.Type]zapi.PayloadType, o
 		},
 	}
 
-	parser := &schemaParser{payloads: payloads, definitions: swagger.Definitions}
+	parser := &schemaParser{definitions: swagger.Definitions}
 	parser.option.applyOptions(option...)
+	groups, payloads := zapi.NewParser(zapi.WithDocFunc(parser.option.DocFunc)).Parse(iterator)
+	parser.payloads = payloads
 
 	for _, group := range groups {
 		swagger.Tags = append(swagger.Tags, spec.NewTag(group.Fullname(), group.Doc, nil))
@@ -194,7 +197,7 @@ func (p *schemaParser) parseParams(api *zapi.HttpApi, binding Binding) (params [
 
 	if api.Request != nil && api.Request.Kind() == reflect.Struct {
 		parsePayload := func(tag string, fn func(element zapi.PayloadElement, values zapi.TagValues)) {
-			cp := make(map[reflect.Type]zapi.PayloadType, len(p.payloads))
+			cp := make(map[reflect.Type]*zapi.PayloadType, len(p.payloads))
 			for k, v := range p.payloads {
 				cp[k] = v
 			}
@@ -230,7 +233,7 @@ func (p *schemaParser) parseParams(api *zapi.HttpApi, binding Binding) (params [
 	return
 }
 
-func (p *schemaParser) Parse(typ zapi.PayloadType) (schema spec.Schema) {
+func (p *schemaParser) Parse(typ *zapi.PayloadType) (schema spec.Schema) {
 	name := escape(typ.Fullname())
 	if _, ok := p.definitions[name]; ok {
 		return refSchema(name)
@@ -301,7 +304,7 @@ func (p *schemaParser) parseElementProperty(ele zapi.PayloadElement, schema *spe
 	addElementProperty(schema, &property, key, !ele.IsPointer() && !values.Exist("omitempty"))
 }
 
-func (p *schemaParser) parseTypeSchema(typ zapi.PayloadType) (schema spec.Schema) {
+func (p *schemaParser) parseTypeSchema(typ *zapi.PayloadType) (schema spec.Schema) {
 	if len(typ.Package) > 0 && !helpers.IsGoStandardPackage(typ.Package) {
 		name := escape(typ.Fullname())
 		p.definitions[name] = schema

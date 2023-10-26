@@ -4,6 +4,7 @@ package zswagger
 
 import (
 	zapi "github.com/go-zing/gozz-kit/zapi"
+	"reflect"
 )
 
 // apply functional options for Option
@@ -18,3 +19,7 @@ func WithHttpCast(v func(api zapi.Api) zapi.HttpApi) func(*Option) {
 }
 
 func WithBindings(v map[string]Binding) func(*Option) { return func(o *Option) { o.Bindings = v } }
+
+func WithDocFunc(v func(reflect.Type, string) string) func(*Option) {
+	return func(o *Option) { o.DocFunc = v }
+}

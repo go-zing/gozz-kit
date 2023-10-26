@@ -12,22 +12,30 @@ import (
 )
 
 func TestParse(t *testing.T) {
-	groups, payloads := zapi.NewParser(zapi.WithDocFunc(zdoc.TypesDoc(ztest.ZZ_types_doc).TypeFieldDoc)).Parse(ztest.Apis{})
-	swagger := Parse(groups, payloads, WithHttpCast(func(api zapi.Api) zapi.HttpApi {
-		sp := strings.SplitN(api.Resource, "|", 2)[:2]
-		return zapi.HttpApi{
-			Api:    api,
-			Method: sp[0],
-			Path:   sp[1],
-		}
-	}), WithBindings(map[string]Binding{
-		"GET": {
-			Path:   "uri",
-			Query:  "form",
-			Header: "",
-			Body:   false,
-		},
-	}))
+	swagger := Parse(ztest.Apis{},
+		WithDocFunc(zdoc.TypesDoc(ztest.ZZ_types_doc).TypeFieldDoc),
+		WithHttpCast(func(api zapi.Api) zapi.HttpApi {
+			sp := strings.SplitN(api.Resource, "|", 2)[:2]
+			return zapi.HttpApi{
+				Api:    api,
+				Method: sp[0],
+				Path:   sp[1],
+			}
+		}),
+		WithBindings(map[string]Binding{
+			"GET": {
+				Path:   "uri",
+				Query:  "form",
+				Header: "",
+				Body:   false,
+			},
+			"POST": {
+				Path:   "uri",
+				Header: "",
+				Body:   true,
+			},
+		}),
+	)
 	b, err := json.MarshalIndent(swagger, "", "    ")
 	if err != nil {
 		t.Fatal(err)

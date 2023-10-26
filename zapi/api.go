@@ -122,14 +122,14 @@ func (p *Parser) parseApiGroup(handler interface{}, specs []map[string]interface
 	return group
 }
 
-func (p *Parser) Parse(iterator Iterator) (groups []ApiGroup, payloads map[reflect.Type]PayloadType) {
+func (p *Parser) Parse(iterator Iterator) (groups []ApiGroup, payloads map[reflect.Type]*PayloadType) {
 	iterator.Iterate(func(handler interface{}, specs []map[string]interface{}) {
 		groups = append(groups, p.parseApiGroup(handler, specs))
 	})
 
-	payloads = make(map[reflect.Type]PayloadType, len(p.types))
+	payloads = make(map[reflect.Type]*PayloadType, len(p.types))
 	for _, typ := range p.types {
-		payloads[typ.Type] = *typ
+		payloads[typ.Type] = typ
 	}
 	return
 }

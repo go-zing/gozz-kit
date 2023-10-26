@@ -18,39 +18,52 @@ import (
 	"github.com/go-zing/gozz-kit/zdoc"
 )
 
-var escapeReplacer = strings.NewReplacer("/", "_")
+const (
+	definitionsPrefix = "#/definitions/"
+	extensionKeyOrder = "x-order"
+)
 
-func escape(str string) string { return escapeReplacer.Replace(str) }
+var (
+	escapeReplacer = strings.NewReplacer("/", "_")
 
-type schemaParser struct {
-	option      Option
-	payloads    map[reflect.Type]zapi.PayloadType
-	definitions spec.Definitions
-}
-
-var defined = map[reflect.Type]func(*spec.Schema){
-	reflect.TypeOf(net.IP{}):          func(schema *spec.Schema) { schema.Typed("string", "ipv4") },
-	reflect.TypeOf(time.Time{}):       func(schema *spec.Schema) { schema.Typed("string", "date-time") },
-	reflect.TypeOf(url.URL{}):         func(schema *spec.Schema) { schema.Typed("string", "uri") },
-	reflect.TypeOf([]byte(nil)):       func(schema *spec.Schema) { schema.Typed("string", "base64") },
-	reflect.TypeOf(json.RawMessage{}): func(schema *spec.Schema) { schema.Typed("object", "") },
-	reflect.TypeOf(struct{}{}):        func(schema *spec.Schema) { schema.Typed("null", "") },
-}
+	defined = map[reflect.Type]func(*spec.Schema){
+		reflect.TypeOf(net.IP{}):          func(schema *spec.Schema) { schema.Typed("string", "ipv4") },
+		reflect.TypeOf(time.Time{}):       func(schema *spec.Schema) { schema.Typed("string", "date-time") },
+		reflect.TypeOf(url.URL{}):         func(schema *spec.Schema) { schema.Typed("string", "uri") },
+		reflect.TypeOf([]byte(nil)):       func(schema *spec.Schema) { schema.Typed("string", "base64") },
+		reflect.TypeOf(json.RawMessage{}): func(schema *spec.Schema) { schema.Typed("object", "") },
+		reflect.TypeOf(struct{}{}):        func(schema *spec.Schema) { schema.Typed("null", "") },
+	}
+)
 
 func RegisterSchemaType(typ reflect.Type, fn func(*spec.Schema)) { defined[typ] = fn }
 
-//go:generate gozz run -p "option" .
-// +zz:option
-type Option struct {
-	HttpCast func(api zapi.Api) zapi.HttpApi
-	Bindings map[string]Binding
-}
+func escape(str string) string { return escapeReplacer.Replace(str) }
 
-type Binding struct {
-	Path   string
-	Query  string
-	Header string
-	Body   bool
+//go:generate gozz run -p "option" .
+type (
+	schemaParser struct {
+		option      Option
+		payloads    map[reflect.Type]zapi.PayloadType
+		definitions spec.Definitions
+	}
+
+	// +zz:option
+	Option struct {
+		HttpCast func(api zapi.Api) zapi.HttpApi
+		Bindings map[string]Binding
+	}
+
+	Binding struct {
+		Path   string
+		Query  string
+		Header string
+		Body   bool
+	}
+)
+
+func refSchema(name string) spec.Schema {
+	return spec.Schema{SchemaProps: spec.SchemaProps{Ref: spec.MustCreateRef(definitionsPrefix + name)}}
 }
 
 func parseBinding(api *zapi.HttpApi, rules map[string]Binding) Binding {
@@ -128,7 +141,7 @@ func Parse(groups []zapi.ApiGroup, payloads map[reflect.Type]zapi.PayloadType, o
 	return
 }
 
-func parseParam(param *spec.Parameter, element zapi.PayloadElement, values zapi.TagValues) {
+func parseParam(param *spec.Parameter, element zapi.PayloadElement) {
 	typ, format, max, min := parseBasicKind(element.Type.Kind())
 	if param.Typed(typ, format); max > 0 {
 		param.WithMaximum(max, false)
@@ -195,14 +208,14 @@ func (p *schemaParser) parseParams(api *zapi.HttpApi, binding Binding) (params [
 		newWith := func(in string) func(element zapi.PayloadElement, values zapi.TagValues) {
 			return func(element zapi.PayloadElement, values zapi.TagValues) {
 				param := &spec.Parameter{ParamProps: spec.ParamProps{Name: values[0], In: in}}
-				parseParam(param, element, values)
+				parseParam(param, element)
 				addParam(param)
 			}
 		}
 
 		parsePayload(binding.Path, func(element zapi.PayloadElement, values zapi.TagValues) {
 			if index, ok := added[values[0]]; ok {
-				parseParam(&params[index], element, values)
+				parseParam(&params[index], element)
 			}
 		})
 
@@ -215,19 +228,6 @@ func (p *schemaParser) parseParams(api *zapi.HttpApi, binding Binding) (params [
 		params = append(params, *spec.BodyParam("", &schema).Named("body"))
 	}
 	return
-}
-
-const (
-	definitionsPrefix = "#/definitions/"
-	extensionKeyOrder = "x-order"
-)
-
-func refSchema(name string) spec.Schema {
-	return spec.Schema{
-		SchemaProps: spec.SchemaProps{
-			Ref: spec.MustCreateRef(definitionsPrefix + name),
-		},
-	}
 }
 
 func (p *schemaParser) Parse(typ zapi.PayloadType) (schema spec.Schema) {

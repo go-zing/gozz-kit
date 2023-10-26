@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"reflect"
+	"strings"
 )
 
 func IndirectType(rt reflect.Type) reflect.Type {
@@ -12,3 +13,7 @@ func IndirectType(rt reflect.Type) reflect.Type {
 }
 
 var Btoi = map[bool]int{true: 1}
+
+func IsGoStandardPackage(pkg string) bool {
+	return !strings.Contains(strings.SplitN(pkg, "/", 2)[0], ".")
+}

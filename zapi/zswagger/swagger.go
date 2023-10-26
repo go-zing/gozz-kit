@@ -301,12 +301,8 @@ func (p *schemaParser) parseElementProperty(ele zapi.PayloadElement, schema *spe
 	addElementProperty(schema, &property, key, !ele.IsPointer() && !values.Exist("omitempty"))
 }
 
-func isStandardPackage(pkg string) bool {
-	return !strings.Contains(strings.SplitN(pkg, "/", 2)[0], ".")
-}
-
 func (p *schemaParser) parseTypeSchema(typ zapi.PayloadType) (schema spec.Schema) {
-	if len(typ.Package) > 0 && !isStandardPackage(typ.Package) {
+	if len(typ.Package) > 0 && !helpers.IsGoStandardPackage(typ.Package) {
 		name := escape(typ.Fullname())
 		p.definitions[name] = schema
 		defer func() { p.definitions[name] = schema; schema = refSchema(name) }()

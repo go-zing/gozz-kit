@@ -162,7 +162,12 @@ func (p *schemaParser) httpCast(api zapi.Api) (h zapi.HttpApi) {
 	if p.option.HttpCast != nil {
 		return p.option.HttpCast(api)
 	}
-	return
+	sp := strings.SplitN(api.Resource, "|", 2)[:2]
+	return zapi.HttpApi{
+		Api:    api,
+		Method: sp[0],
+		Path:   sp[1],
+	}
 }
 
 func (p *schemaParser) parseBinding(h *zapi.HttpApi) Binding {

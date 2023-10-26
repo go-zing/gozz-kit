@@ -182,8 +182,8 @@ func (p *schemaParser) parseOperation(group *zapi.ApiGroup, api *zapi.HttpApi) (
 	// parse params
 	o.Parameters = p.parseParams(api, p.parseBinding(api))
 	// parse response
-	if api.Response != nil {
-		schema := p.Parse(p.payloads[api.Response])
+	if payload := p.payloads[api.Response]; payload != nil {
+		schema := p.Parse(payload)
 		o.RespondsWith(http.StatusOK, spec.NewResponse().WithSchema(&schema))
 	}
 	return
@@ -237,8 +237,8 @@ func (p *schemaParser) parseParams(api *zapi.HttpApi, binding Binding) (params [
 		parsePayload(binding.Header, newWith("header"))
 	}
 
-	if binding.Body {
-		schema := p.Parse(p.payloads[api.Request])
+	if payload := p.payloads[api.Request]; payload != nil && binding.Body {
+		schema := p.Parse(payload)
 		params = append(params, *spec.BodyParam("", &schema).Named("body"))
 	}
 	return

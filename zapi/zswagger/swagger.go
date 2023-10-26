@@ -74,27 +74,25 @@ func parseBinding(api *zapi.HttpApi, rules map[string]Binding) Binding {
 	return rule
 }
 
-func parseElements(payloads map[reflect.Type]zapi.PayloadType, elements []zapi.PayloadElement, tags string, fn func(zapi.PayloadElement, zapi.TagValues)) {
+func parseElements(payloads map[reflect.Type]zapi.PayloadType, root zapi.PayloadType, tags string, fn func(zapi.PayloadElement, zapi.TagValues)) {
 	if len(tags) == 0 {
 		return
 	}
-
-	parseElement := func(tag string, ele zapi.PayloadElement) {
-		typ := payloads[ele.Type]
-		values := ele.Tags.Get(tag).Split(",")
-		value := values[0]
-		if value == "-" {
-			return
-		} else if ele.IsAnonymous() && len(value) == 0 && typ.Kind == reflect.Struct {
-			delete(payloads, ele.Type)
-			parseElements(payloads, typ.Elements, tags, fn)
-		}
-		fn(ele, values)
-	}
-
+	delete(payloads, root.Type)
 	for _, tag := range strings.Split(tags, ",") {
-		for _, ele := range elements {
-			parseElement(tag, ele)
+		for _, ele := range root.Elements {
+			typ, ok := payloads[ele.Type]
+			if !ok {
+				continue
+			}
+			values := ele.Tags.Get(tag).Split(",")
+			value := values[0]
+			if value == "-" {
+				continue
+			} else if ele.IsAnonymous() && len(value) == 0 && typ.Kind == reflect.Struct {
+				parseElements(payloads, typ, tags, fn)
+			}
+			fn(ele, values)
 		}
 	}
 }
@@ -130,7 +128,7 @@ func Parse(groups []zapi.ApiGroup, payloads map[reflect.Type]zapi.PayloadType, c
 		for _, path := range strings.Split(api.Path, "/") {
 			if strings.HasPrefix(path, "{") && strings.HasSuffix(path, "}") {
 				name := strings.TrimSuffix(strings.TrimPrefix(path, "{"), "}")
-				params = append(params, *spec.PathParam(name))
+				params = append(params, *spec.PathParam(name).Typed("string", ""))
 				pathParams[name] = len(params) - 1
 			}
 		}
@@ -140,7 +138,7 @@ func Parse(groups []zapi.ApiGroup, payloads map[reflect.Type]zapi.PayloadType, c
 			for k, v := range payloads {
 				cp[k] = v
 			}
-			parseElements(cp, cp[api.Request].Elements, tags, func(element zapi.PayloadElement, values zapi.TagValues) {
+			parseElements(cp, cp[api.Request], tags, func(element zapi.PayloadElement, values zapi.TagValues) {
 				if len(values[0]) > 0 {
 					fn(element, values)
 				}
@@ -151,8 +149,8 @@ func Parse(groups []zapi.ApiGroup, payloads map[reflect.Type]zapi.PayloadType, c
 			parseParam := func(param *spec.Parameter, element zapi.PayloadElement, values zapi.TagValues) {
 				typ, format, max, min := parseBasicKind(element.Type.Kind())
 				if param.Typed(typ, format); max > 0 {
-					param.WithMaximum(float64(max), false)
-					param.WithMinimum(float64(min), false)
+					param.WithMaximum(max, false)
+					param.WithMinimum(min, false)
 				}
 			}
 
@@ -179,7 +177,7 @@ func Parse(groups []zapi.ApiGroup, payloads map[reflect.Type]zapi.PayloadType, c
 
 		if binding.Body {
 			schema := parser.Parse(payloads[api.Request])
-			params = append(params, *spec.BodyParam("", &schema))
+			params = append(params, *spec.BodyParam("", &schema).Named("body"))
 		}
 		return
 	}
@@ -339,8 +337,8 @@ func (p *schemaParser) parseTypeSchema(typ zapi.PayloadType) (schema spec.Schema
 
 	if t, format, max, min := parseBasicKind(typ.Kind); len(t) > 0 {
 		if schema.Typed(t, format); max > 0 {
-			schema.WithMaximum(float64(max), false)
-			schema.WithMinimum(float64(min), false)
+			schema.WithMaximum(max, false)
+			schema.WithMinimum(min, false)
 		}
 	}
 	return

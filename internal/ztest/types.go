@@ -73,9 +73,6 @@ type (
 
 		// exported recursive
 		Exported *Payload `form:"exported" json:"exported"`
-
-		// unexported recursive
-		unexported *Payload
 	}
 
 	unexportedEmbedded struct {

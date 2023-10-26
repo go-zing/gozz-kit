@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-zing/gozz-kit/internal/helpers"
 	"github.com/go-zing/gozz-kit/zapi"
+	"github.com/go-zing/gozz-kit/zdoc"
 )
 
 var escapeReplacer = strings.NewReplacer("/", "_")
@@ -284,12 +285,19 @@ func (p *schemaParser) parseElementProperty(ele zapi.PayloadElement, schema *spe
 		key = ele.Name
 	}
 
+	// parse property
 	property := p.Parse(typ)
-	setSchemaDoc(&property, ele.Doc)
+
+	// title description
+	property.Title, property.Description = zdoc.Split(ele.Doc)
+
+	// combine ref with allOf
 	if ref := property.Ref; len(ref.String()) > 0 {
 		property.Ref = spec.Ref{}
 		property.AddToAllOf(spec.Schema{SchemaProps: spec.SchemaProps{Ref: ref}})
 	}
+
+	// add to schema properties
 	addElementProperty(schema, &property, key, !ele.IsPointer() && !values.Exist("omitempty"))
 }
 
@@ -297,31 +305,21 @@ func isStandardPackage(pkg string) bool {
 	return !strings.Contains(strings.SplitN(pkg, "/", 2)[0], ".")
 }
 
-func setSchemaDoc(schema *spec.Schema, doc string) {
-	sp := strings.SplitN(doc, "\n", 2)[:2]
-	schema.WithTitle(strings.TrimSpace(sp[0]))
-	schema.WithDescription(strings.TrimSpace(sp[1]))
-}
-
 func (p *schemaParser) parseTypeSchema(typ zapi.PayloadType) (schema spec.Schema) {
 	if len(typ.Package) > 0 && !isStandardPackage(typ.Package) {
 		name := escape(typ.Fullname())
 		p.definitions[name] = schema
-		defer func() {
-			p.definitions[name] = schema
-			schema = refSchema(name)
-		}()
+		defer func() { p.definitions[name] = schema; schema = refSchema(name) }()
 	}
 
-	setSchemaDoc(&schema, typ.Doc)
+	schema.Title, schema.Description = zdoc.Split(typ.Doc)
+	schema.Example = typ.Entity
 
 	if define, ok := defined[typ.Type]; ok {
 		if define(&schema); len(schema.Type) > 0 {
 			return
 		}
 	}
-
-	schema.Example = typ.Entity
 
 	switch typ.Kind {
 	case reflect.Interface:
@@ -338,10 +336,10 @@ func (p *schemaParser) parseTypeSchema(typ zapi.PayloadType) (schema spec.Schema
 		schema.Typed("array", "")
 		itemSchema := p.Parse(p.payloads[typ.Elements[0].Type])
 		schema.Items = &spec.SchemaOrArray{Schema: &itemSchema}
-	}
-
-	if t, format, max, min := parseBasicKind(typ.Kind); len(t) > 0 {
-		if schema.Typed(t, format); max > 0 {
+	default:
+		t, format, max, min := parseBasicKind(typ.Kind)
+		schema.Typed(t, format)
+		if max > 0 {
 			schema.WithMaximum(max, false)
 			schema.WithMinimum(min, false)
 		}
@@ -349,32 +347,30 @@ func (p *schemaParser) parseTypeSchema(typ zapi.PayloadType) (schema spec.Schema
 	return
 }
 
-func parseBasicKind(k reflect.Kind) (typ, format string, max, min float64) {
-	kind := k.String()
+func parseIntegerKind(kind string) (typ, format string, max, min float64) {
+	format = kind
+	unsigned := helpers.Btoi[strings.HasPrefix(kind, "u")]
+	size := strconv.IntSize
+	if ss := strings.TrimPrefix(kind[unsigned:], "int"); len(ss) > 0 {
+		size, _ = strconv.Atoi(ss)
+	} else {
+		format += strconv.Itoa(size)
+	}
+	return "integer", format, float64(uintptr(1<<unsigned)<<(size-1) - 1), max * float64(unsigned-1)
+}
 
-	switch k {
+func parseBasicKind(k reflect.Kind) (typ, format string, max, min float64) {
+	switch kind := k.String(); k {
 	case reflect.Bool:
 		return "boolean", "", 0, 0
 	case reflect.String:
 		return "string", "", 0, 0
-	case reflect.Float32:
+	case reflect.Float32, reflect.Float64:
 		return "number", kind, 0, 0
-	case reflect.Float64:
-		return "number", kind, 0, 0
-	}
-
-	if strings.Contains(kind, "int") {
-		typ = "integer"
-		format = kind
-		unsigned := helpers.Btoi[strings.HasPrefix(kind, "u")]
-		size := strconv.IntSize
-		if ss := strings.TrimPrefix(kind[unsigned:], "int"); len(ss) > 0 {
-			size, _ = strconv.Atoi(ss)
-		} else {
-			format += strconv.Itoa(size)
+	default:
+		if strings.Contains(kind, "int") {
+			return parseIntegerKind(kind)
 		}
-		max = float64(uintptr(1<<unsigned)<<(size-1) - 1)
-		min = max * float64(unsigned-1)
 	}
 	return
 }

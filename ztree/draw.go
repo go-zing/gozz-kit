@@ -235,10 +235,10 @@ func structDefine(value *Value, types map[string]*Type) string {
 	rangeMap(typ.Elements, func(fieldName, fieldType string, index int) {
 		if elementType, ok := types[fieldType]; ok {
 			if value.Flags[fieldName]&flagAnonymous != 0 {
-				_, _ = fmt.Fprintf(str, fieldName)
-				_, _ = fmt.Fprintf(str, " ")
+				_, _ = fmt.Fprint(str, fieldName)
+				_, _ = fmt.Fprint(str, " ")
 			}
-			_, _ = fmt.Fprintf(str, pointerPrefix(value, fieldName))
+			_, _ = fmt.Fprint(str, pointerPrefix(value, fieldName))
 			_, _ = fmt.Fprintf(str, "%s\n", elementType.String)
 		}
 	})

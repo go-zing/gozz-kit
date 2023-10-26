@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strconv"
 	"unsafe"
+
+	"github.com/go-zing/gozz-kit/internal/helpers"
 )
 
 //go:generate gozz run -p "option" -p "tag" .
@@ -276,16 +278,8 @@ func (p *parser) ParseValues(rv reflect.Value, exported bool) (id string) {
 }
 
 func (p *parser) parseValue(v *Value, key string, rv reflect.Value, exported, anonymous bool) {
-	v.Flags[key] |= flagAnonymous * boolFlag(anonymous)
-	v.Flags[key] |= flagUnexported * boolFlag(!exported)
-	v.Flags[key] |= flagPointer * boolFlag(rv.Kind() == reflect.Ptr)
+	v.Flags[key] |= flagAnonymous * helpers.Btoi[anonymous]
+	v.Flags[key] |= flagUnexported * helpers.Btoi[!exported]
+	v.Flags[key] |= flagPointer * helpers.Btoi[rv.Kind() == reflect.Ptr]
 	v.Elements[key] = p.ParseValues(rv, exported)
-}
-
-func boolFlag(b bool) int {
-	if b {
-		return 1
-	} else {
-		return 0
-	}
 }

@@ -70,26 +70,24 @@ func parseBinding(api *zapi.HttpApi, rules map[string]Binding) Binding {
 	return rule
 }
 
-func parseElements(payloads map[reflect.Type]zapi.PayloadType, root zapi.PayloadType, tags string, fn func(zapi.PayloadElement, zapi.TagValues)) {
-	if len(tags) == 0 {
+func parseElements(payloads map[reflect.Type]zapi.PayloadType, root zapi.PayloadType, tag string, fn func(zapi.PayloadElement, zapi.TagValues)) {
+	if len(tag) == 0 {
 		return
 	}
 	delete(payloads, root.Type)
-	for _, tag := range strings.Split(tags, ",") {
-		for _, ele := range root.Elements {
-			typ, ok := payloads[ele.Type]
-			if !ok {
-				continue
-			}
-			values := ele.Tags.Get(tag).Split(",")
-			value := values[0]
-			if value == "-" {
-				continue
-			} else if ele.IsAnonymous() && len(value) == 0 && typ.Kind == reflect.Struct {
-				parseElements(payloads, typ, tags, fn)
-			}
-			fn(ele, values)
+	for _, ele := range root.Elements {
+		typ, ok := payloads[ele.Type]
+		if !ok {
+			continue
 		}
+		values := ele.Tags.Get(tag).Split(",")
+		value := values[0]
+		if value == "-" {
+			continue
+		} else if ele.IsAnonymous() && len(value) == 0 && typ.Kind == reflect.Struct {
+			parseElements(payloads, typ, tag, fn)
+		}
+		fn(ele, values)
 	}
 }
 
@@ -163,48 +161,51 @@ func (p *schemaParser) parseOperation(group *zapi.ApiGroup, api *zapi.HttpApi) (
 }
 
 func (p *schemaParser) parseParams(api *zapi.HttpApi, binding Binding) (params []spec.Parameter) {
-	pathParams := make(map[string]int)
+	added := make(map[string]int)
+
+	addParam := func(param *spec.Parameter) {
+		if len(param.Type) > 0 && len(param.Name) > 0 {
+			added[param.Name] = len(params)
+			params = append(params, *param)
+		}
+	}
 
 	for _, path := range strings.Split(api.Path, "/") {
 		if strings.HasPrefix(path, "{") && strings.HasSuffix(path, "}") {
 			name := strings.TrimSuffix(strings.TrimPrefix(path, "{"), "}")
-			params = append(params, *spec.PathParam(name).Typed("string", ""))
-			pathParams[name] = len(params) - 1
+			addParam(spec.PathParam(name).Typed("string", ""))
 		}
-	}
-
-	parseRequestPayload := func(tags string, fn func(element zapi.PayloadElement, values zapi.TagValues)) {
-		cp := make(map[reflect.Type]zapi.PayloadType, len(p.payloads))
-		for k, v := range p.payloads {
-			cp[k] = v
-		}
-		parseElements(cp, cp[api.Request], tags, func(element zapi.PayloadElement, values zapi.TagValues) {
-			if len(values[0]) > 0 {
-				fn(element, values)
-			}
-		})
 	}
 
 	if api.Request != nil && api.Request.Kind() == reflect.Struct {
-		parseRequestPayload(binding.Path, func(element zapi.PayloadElement, values zapi.TagValues) {
-			if index, ok := pathParams[values[0]]; ok {
+		parsePayload := func(tag string, fn func(element zapi.PayloadElement, values zapi.TagValues)) {
+			cp := make(map[reflect.Type]zapi.PayloadType, len(p.payloads))
+			for k, v := range p.payloads {
+				cp[k] = v
+			}
+			parseElements(cp, cp[api.Request], tag, func(element zapi.PayloadElement, values zapi.TagValues) {
+				if _, exist := added[values[0]]; !exist && len(values[0]) > 0 {
+					fn(element, values)
+				}
+			})
+		}
+
+		newWith := func(in string) func(element zapi.PayloadElement, values zapi.TagValues) {
+			return func(element zapi.PayloadElement, values zapi.TagValues) {
+				param := &spec.Parameter{ParamProps: spec.ParamProps{Name: values[0], In: in}}
+				parseParam(param, element, values)
+				addParam(param)
+			}
+		}
+
+		parsePayload(binding.Path, func(element zapi.PayloadElement, values zapi.TagValues) {
+			if index, ok := added[values[0]]; ok {
 				parseParam(&params[index], element, values)
 			}
 		})
 
-		parseRequestPayload(binding.Query, func(element zapi.PayloadElement, values zapi.TagValues) {
-			param := spec.QueryParam(values[0])
-			if parseParam(param, element, values); len(param.Type) > 0 {
-				params = append(params, *param)
-			}
-		})
-
-		parseRequestPayload(binding.Header, func(element zapi.PayloadElement, values zapi.TagValues) {
-			param := spec.HeaderParam(values[0])
-			if parseParam(param, element, values); len(param.Type) > 0 {
-				params = append(params, *param)
-			}
-		})
+		parsePayload(binding.Query, newWith("query"))
+		parsePayload(binding.Header, newWith("header"))
 	}
 
 	if binding.Body {

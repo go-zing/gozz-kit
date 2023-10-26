@@ -165,7 +165,7 @@ func (p *schemaParser) parseParams(api *zapi.HttpApi, binding Binding) (params [
 	added := make(map[string]int)
 
 	addParam := func(param *spec.Parameter) {
-		if len(param.Type) > 0 && len(param.Name) > 0 {
+		if _, exist := added[param.Name]; !exist && len(param.Type) > 0 && len(param.Name) > 0 {
 			added[param.Name] = len(params)
 			params = append(params, *param)
 		}

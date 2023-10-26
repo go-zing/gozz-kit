@@ -86,11 +86,8 @@ func (typ PayloadType) Fullname() string {
 
 func SplitFn(sep string) func(resource string) (method, path string) {
 	return func(resource string) (method, path string) {
-		sp := strings.SplitN(resource, sep, 2)
-		if len(sp) > 1 {
-			return sp[0], sp[1]
-		}
-		return sp[0], ""
+		sp := strings.SplitN(resource, sep, 2)[:2]
+		return sp[0], sp[1]
 	}
 }
 

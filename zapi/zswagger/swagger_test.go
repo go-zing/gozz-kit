@@ -3,6 +3,7 @@ package zswagger
 import (
 	"encoding/json"
 	"io/ioutil"
+	"strings"
 	"testing"
 
 	"github.com/go-zing/gozz-kit/internal/ztest"
@@ -11,15 +12,14 @@ import (
 
 func TestParse(t *testing.T) {
 	groups, payloads := zapi.NewParser(zapi.WithDocFunc(ztest.Docs.TypeFieldDoc)).Parse(ztest.Apis{})
-	fn := zapi.SplitFn("|")
-	swagger := Parse(groups, payloads, func(api zapi.Api) zapi.HttpApi {
-		method, path := fn(api.Resource)
+	swagger := Parse(groups, payloads, WithHttpCast(func(api zapi.Api) zapi.HttpApi {
+		sp := strings.SplitN(api.Resource, "|", 2)[:2]
 		return zapi.HttpApi{
 			Api:    api,
-			Method: method,
-			Path:   path,
+			Method: sp[0],
+			Path:   sp[1],
 		}
-	})
+	}))
 	b, err := json.MarshalIndent(swagger, "", "    ")
 	if err != nil {
 		t.Fatal(err)

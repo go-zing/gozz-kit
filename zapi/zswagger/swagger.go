@@ -22,6 +22,7 @@ var escapeReplacer = strings.NewReplacer("/", "_")
 func escape(str string) string { return escapeReplacer.Replace(str) }
 
 type schemaParser struct {
+	option      Option
 	payloads    map[reflect.Type]zapi.PayloadType
 	definitions spec.Definitions
 }
@@ -37,24 +38,18 @@ var defined = map[reflect.Type]func(*spec.Schema){
 
 func RegisterSchemaType(typ reflect.Type, fn func(*spec.Schema)) { defined[typ] = fn }
 
+//go:generate gozz run -p "option" .
+// +zz:option
+type Option struct {
+	HttpCast func(api zapi.Api) zapi.HttpApi
+	Bindings map[string]Binding
+}
+
 type Binding struct {
 	Path   string
 	Query  string
 	Header string
 	Body   bool
-}
-
-var defaultBindings = map[string]Binding{
-	"GET": {
-		Path:  "*",
-		Query: "*",
-		Body:  false,
-	},
-	"*": {
-		Path:  "uri",
-		Query: "form,query",
-		Body:  true,
-	},
 }
 
 func parseBinding(api *zapi.HttpApi, rules map[string]Binding) Binding {
@@ -97,7 +92,16 @@ func parseElements(payloads map[reflect.Type]zapi.PayloadType, root zapi.Payload
 	}
 }
 
-func Parse(groups []zapi.ApiGroup, payloads map[reflect.Type]zapi.PayloadType, cast func(api zapi.Api) zapi.HttpApi) (swagger *spec.Swagger) {
+func setOperation(paths map[string]spec.PathItem, method, path string, operate spec.Operation) {
+	item := paths[path]
+	fieldName := strings.Title(strings.ToLower(method))
+	if v := reflect.ValueOf(&item).Elem().FieldByName(fieldName); v.IsValid() {
+		v.Set(reflect.ValueOf(&operate))
+		paths[path] = item
+	}
+}
+
+func Parse(groups []zapi.ApiGroup, payloads map[reflect.Type]zapi.PayloadType, option ...func(*Option)) (swagger *spec.Swagger) {
 	swagger = &spec.Swagger{
 		SwaggerProps: spec.SwaggerProps{
 			Info:        &spec.Info{},
@@ -108,105 +112,103 @@ func Parse(groups []zapi.ApiGroup, payloads map[reflect.Type]zapi.PayloadType, c
 		},
 	}
 
-	parser := schemaParser{payloads: payloads, definitions: swagger.Definitions}
-
-	setOperation := func(method, path string, operate spec.Operation) {
-		item := swagger.Paths.Paths[path]
-		fieldName := strings.Title(strings.ToLower(method))
-		if v := reflect.ValueOf(&item).Elem().FieldByName(fieldName); v.IsValid() {
-			v.Set(reflect.ValueOf(&operate))
-			swagger.Paths.Paths[path] = item
-		}
-	}
-
-	bindings := defaultBindings
-
-	parseParams := func(api *zapi.HttpApi) (params []spec.Parameter) {
-		binding := parseBinding(api, bindings)
-		pathParams := make(map[string]int)
-
-		for _, path := range strings.Split(api.Path, "/") {
-			if strings.HasPrefix(path, "{") && strings.HasSuffix(path, "}") {
-				name := strings.TrimSuffix(strings.TrimPrefix(path, "{"), "}")
-				params = append(params, *spec.PathParam(name).Typed("string", ""))
-				pathParams[name] = len(params) - 1
-			}
-		}
-
-		parseRequestPayload := func(tags string, fn func(element zapi.PayloadElement, values zapi.TagValues)) {
-			cp := make(map[reflect.Type]zapi.PayloadType, len(payloads))
-			for k, v := range payloads {
-				cp[k] = v
-			}
-			parseElements(cp, cp[api.Request], tags, func(element zapi.PayloadElement, values zapi.TagValues) {
-				if len(values[0]) > 0 {
-					fn(element, values)
-				}
-			})
-		}
-
-		if api.Request != nil && api.Request.Kind() == reflect.Struct {
-			parseParam := func(param *spec.Parameter, element zapi.PayloadElement, values zapi.TagValues) {
-				typ, format, max, min := parseBasicKind(element.Type.Kind())
-				if param.Typed(typ, format); max > 0 {
-					param.WithMaximum(max, false)
-					param.WithMinimum(min, false)
-				}
-			}
-
-			parseRequestPayload(binding.Path, func(element zapi.PayloadElement, values zapi.TagValues) {
-				if index, ok := pathParams[values[0]]; ok {
-					parseParam(&params[index], element, values)
-				}
-			})
-
-			parseRequestPayload(binding.Query, func(element zapi.PayloadElement, values zapi.TagValues) {
-				param := spec.QueryParam(values[0])
-				if parseParam(param, element, values); len(param.Type) > 0 {
-					params = append(params, *param)
-				}
-			})
-
-			parseRequestPayload(binding.Header, func(element zapi.PayloadElement, values zapi.TagValues) {
-				param := spec.HeaderParam(values[0])
-				if parseParam(param, element, values); len(param.Type) > 0 {
-					params = append(params, *param)
-				}
-			})
-		}
-
-		if binding.Body {
-			schema := parser.Parse(payloads[api.Request])
-			params = append(params, *spec.BodyParam("", &schema).Named("body"))
-		}
-		return
-	}
-
-	parseResponse := func(api *zapi.HttpApi) (response *spec.Schema) {
-		if api.Response != nil {
-			schema := parser.Parse(payloads[api.Response])
-			response = &schema
-		}
-		return
-	}
-
-	parseOperation := func(group *zapi.ApiGroup, api *zapi.HttpApi) (o spec.Operation) {
-		o.ID = group.Fullname() + "." + api.Name
-		o.Description = api.Doc
-		o.Tags = append(o.Tags, group.Fullname())
-		o.Parameters = parseParams(api)
-		o.RespondsWith(http.StatusOK, spec.NewResponse().WithSchema(parseResponse(api)))
-		return
-	}
+	parser := &schemaParser{payloads: payloads, definitions: swagger.Definitions}
+	parser.option.applyOptions(option...)
 
 	for _, group := range groups {
 		swagger.Tags = append(swagger.Tags, spec.NewTag(group.Fullname(), group.Doc, nil))
 		for _, api := range group.Apis {
-			h := cast(api)
+			h := parser.httpCast(api)
 			h.Method = strings.ToUpper(h.Method)
 			h.Path = "/" + strings.TrimPrefix(h.Path, "/")
-			setOperation(h.Method, h.Path, parseOperation(&group, &h))
+			setOperation(swagger.Paths.Paths, h.Method, h.Path, parser.parseOperation(&group, &h))
 		}
+	}
+	return
+}
+
+func parseParam(param *spec.Parameter, element zapi.PayloadElement, values zapi.TagValues) {
+	typ, format, max, min := parseBasicKind(element.Type.Kind())
+	if param.Typed(typ, format); max > 0 {
+		param.WithMaximum(max, false)
+		param.WithMinimum(min, false)
+	}
+}
+
+func (p *schemaParser) httpCast(api zapi.Api) (h zapi.HttpApi) {
+	if p.option.HttpCast != nil {
+		return p.option.HttpCast(api)
+	}
+	return
+}
+
+func (p *schemaParser) parseBinding(h *zapi.HttpApi) Binding {
+	return parseBinding(h, p.option.Bindings)
+}
+
+func (p *schemaParser) parseOperation(group *zapi.ApiGroup, api *zapi.HttpApi) (o spec.Operation) {
+	// meta info
+	o.ID = group.Fullname() + "." + api.Name
+	o.Description = api.Doc
+	o.Tags = append(o.Tags, group.Fullname())
+	// parse params
+	o.Parameters = p.parseParams(api, p.parseBinding(api))
+	// parse response
+	if api.Response != nil {
+		schema := p.Parse(p.payloads[api.Response])
+		o.RespondsWith(http.StatusOK, spec.NewResponse().WithSchema(&schema))
+	}
+	return
+}
+
+func (p *schemaParser) parseParams(api *zapi.HttpApi, binding Binding) (params []spec.Parameter) {
+	pathParams := make(map[string]int)
+
+	for _, path := range strings.Split(api.Path, "/") {
+		if strings.HasPrefix(path, "{") && strings.HasSuffix(path, "}") {
+			name := strings.TrimSuffix(strings.TrimPrefix(path, "{"), "}")
+			params = append(params, *spec.PathParam(name).Typed("string", ""))
+			pathParams[name] = len(params) - 1
+		}
+	}
+
+	parseRequestPayload := func(tags string, fn func(element zapi.PayloadElement, values zapi.TagValues)) {
+		cp := make(map[reflect.Type]zapi.PayloadType, len(p.payloads))
+		for k, v := range p.payloads {
+			cp[k] = v
+		}
+		parseElements(cp, cp[api.Request], tags, func(element zapi.PayloadElement, values zapi.TagValues) {
+			if len(values[0]) > 0 {
+				fn(element, values)
+			}
+		})
+	}
+
+	if api.Request != nil && api.Request.Kind() == reflect.Struct {
+		parseRequestPayload(binding.Path, func(element zapi.PayloadElement, values zapi.TagValues) {
+			if index, ok := pathParams[values[0]]; ok {
+				parseParam(&params[index], element, values)
+			}
+		})
+
+		parseRequestPayload(binding.Query, func(element zapi.PayloadElement, values zapi.TagValues) {
+			param := spec.QueryParam(values[0])
+			if parseParam(param, element, values); len(param.Type) > 0 {
+				params = append(params, *param)
+			}
+		})
+
+		parseRequestPayload(binding.Header, func(element zapi.PayloadElement, values zapi.TagValues) {
+			param := spec.HeaderParam(values[0])
+			if parseParam(param, element, values); len(param.Type) > 0 {
+				params = append(params, *param)
+			}
+		})
+	}
+
+	if binding.Body {
+		schema := p.Parse(p.payloads[api.Request])
+		params = append(params, *spec.BodyParam("", &schema).Named("body"))
 	}
 	return
 }

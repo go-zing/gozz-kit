@@ -3,7 +3,7 @@
 package ztest
 
 var (
-	_types_doc = map[interface{}]map[string]string{
+	ZZ_types_doc = map[interface{}]map[string]string{
 		(*Api)(nil):      _doc_Api,
 		(*Payload)(nil):  _doc_Payload,
 		(*Embedded)(nil): _doc_Embedded,
@@ -33,7 +33,6 @@ var (
 		"Bytes":         "bytes field",
 		"Refer":         "refer struct",
 		"Exported":      "exported recursive",
-		"unexported":    "unexported recursive",
 	}
 
 	_doc_Embedded = map[string]string{
@@ -41,7 +40,3 @@ var (
 		"Payload": "anonymous field with pointer element",
 	}
 )
-
-func (Payload) FieldDoc(f string) string { return _doc_Payload[f] }
-
-func (Embedded) FieldDoc(f string) string { return _doc_Embedded[f] }

@@ -8,15 +8,33 @@ import (
 	"github.com/go-zing/gozz-kit/internal/helpers"
 )
 
-type Docs struct {
-	mu     sync.Mutex
-	types  map[reflect.Type]map[string]string
-	values map[string]map[interface{}]string
-}
+type (
+	Docs struct {
+		mu     sync.Mutex
+		types  map[reflect.Type]map[string]string
+		values map[string]map[interface{}]string
+	}
+
+	TypesDoc map[interface{}]map[string]string
+)
 
 func Split(doc string) (title, description string) {
 	sp := strings.SplitN(doc, "\n", 2)[:2]
 	return strings.TrimSpace(sp[0]), strings.TrimSpace(sp[1])
+}
+
+func (d TypesDoc) TypeFieldDoc(rt reflect.Type, field string) string {
+	for k, v := range d {
+		ct, ok := k.(reflect.Type)
+		if !ok {
+			ct = helpers.IndirectType(reflect.TypeOf(k))
+			d[ct] = v
+		}
+		if ct == rt {
+			return v[field]
+		}
+	}
+	return ""
 }
 
 func (d *Docs) TypeFieldDoc(rt reflect.Type, field string) string {
@@ -27,7 +45,7 @@ func (d *Docs) TypeFieldDoc(rt reflect.Type, field string) string {
 	return m[field]
 }
 
-func (d *Docs) LoadTypes(types map[interface{}]map[string]string) {
+func (d *Docs) LoadTypes(types TypesDoc) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.types == nil {

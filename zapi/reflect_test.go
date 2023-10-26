@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	ztest2 "github.com/go-zing/gozz-kit/internal/ztest"
+	"github.com/go-zing/gozz-kit/zdoc"
 )
 
 func TestParseStructTag(t *testing.T) {
@@ -15,7 +16,7 @@ func TestParseStructTag(t *testing.T) {
 }
 
 func TestParse(t *testing.T) {
-	p := Parser{docFunc: ztest2.Docs.TypeFieldDoc}
+	p := Parser{docFunc: zdoc.TypesDoc(ztest2.ZZ_types_doc).TypeFieldDoc}
 	groups, payloads := p.Parse(ztest2.Apis{})
 	t.Log(groups, payloads)
 }

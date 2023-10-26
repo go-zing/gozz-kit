@@ -2,17 +2,9 @@ package ztest
 
 import (
 	"context"
-
-	"github.com/go-zing/gozz-kit/zdoc"
 )
 
 //go:generate gozz run -p "doc" -p "api" -p "tag" ./
-
-var Docs = zdoc.Docs{}
-
-func init() {
-	Docs.LoadTypes(_types_doc)
-}
 
 // +zz:doc
 // +zz:tag:json,form:{{ snake .FieldName }}

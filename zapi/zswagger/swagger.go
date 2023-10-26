@@ -223,7 +223,9 @@ func (p *schemaParser) parseParams(api *zapi.HttpApi, binding Binding) (params [
 
 		parsePayload(binding.Path, func(element zapi.PayloadElement, values zapi.TagValues) {
 			if index, ok := added[values[0]]; ok {
-				(&params[index]).Typed(parseBasicKind(element.Type.Kind()))
+				param := &params[index]
+				param.Description = element.Doc
+				param.Typed(parseBasicKind(element.Type.Kind()))
 			}
 		})
 

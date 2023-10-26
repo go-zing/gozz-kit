@@ -216,6 +216,7 @@ func (p *schemaParser) parseParams(api *zapi.HttpApi, binding Binding) (params [
 		newWith := func(in string) func(element zapi.PayloadElement, values zapi.TagValues) {
 			return func(element zapi.PayloadElement, values zapi.TagValues) {
 				param := &spec.Parameter{ParamProps: spec.ParamProps{Name: values[0], In: in}}
+				param.Description = element.Doc
 				param.Typed(parseBasicKind(element.Type.Kind()))
 				addParam(param)
 			}

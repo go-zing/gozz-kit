@@ -56,36 +56,42 @@
                     },
                     {
                         "type": "string",
+                        "description": "string field\nmulti line doc",
                         "name": "string",
                         "in": "query"
                     },
                     {
                         "type": "integer",
                         "format": "int64",
+                        "description": "int field",
                         "name": "int",
                         "in": "query"
                     },
                     {
                         "type": "integer",
                         "format": "int64",
+                        "description": "int64 field",
                         "name": "int64",
                         "in": "query"
                     },
                     {
                         "type": "integer",
                         "format": "uint64",
+                        "description": "uint field",
                         "name": "uint",
                         "in": "query"
                     },
                     {
                         "type": "integer",
                         "format": "uint16",
+                        "description": "uint16 field",
                         "name": "uint16",
                         "in": "query"
                     },
                     {
                         "type": "integer",
                         "format": "int16",
+                        "description": "int16 field",
                         "name": "int16",
                         "in": "query"
                     },

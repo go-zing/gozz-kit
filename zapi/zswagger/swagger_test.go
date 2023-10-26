@@ -19,6 +19,13 @@ func TestParse(t *testing.T) {
 			Method: sp[0],
 			Path:   sp[1],
 		}
+	}), WithBindings(map[string]Binding{
+		"GET": {
+			Path:   "uri",
+			Query:  "form",
+			Header: "",
+			Body:   false,
+		},
 	}))
 	b, err := json.MarshalIndent(swagger, "", "    ")
 	if err != nil {

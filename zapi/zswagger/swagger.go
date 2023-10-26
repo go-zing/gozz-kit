@@ -53,18 +53,19 @@ type Binding struct {
 }
 
 func parseBinding(api *zapi.HttpApi, rules map[string]Binding) Binding {
-	rule, ok := rules[api.Method]
+	rule, ok := rules[strings.ToUpper(api.Method)]
 	if !ok {
 		return rules["*"]
 	}
 	rv := reflect.ValueOf(&rule).Elem()
 	for i := 0; i < rv.NumField(); i++ {
-		v, ok := rv.Field(i).Addr().Interface().(*string)
-		if !ok {
+		v, valid := rv.Field(i).Addr().Interface().(*string)
+		if !valid {
 			continue
 		}
-		ref, ok := rules[*v]
-		*v = reflect.ValueOf(ref).Field(i).String()
+		if ref, exist := rules[strings.ToUpper(*v)]; exist {
+			*v = reflect.ValueOf(ref).Field(i).String()
+		}
 	}
 	return rule
 }

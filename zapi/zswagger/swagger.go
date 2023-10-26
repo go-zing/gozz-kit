@@ -86,8 +86,9 @@ func parseElements(payloads map[reflect.Type]zapi.PayloadType, root zapi.Payload
 			continue
 		} else if ele.IsAnonymous() && len(value) == 0 && typ.Kind == reflect.Struct {
 			parseElements(payloads, typ, tag, fn)
+		} else {
+			fn(ele, values)
 		}
-		fn(ele, values)
 	}
 }
 

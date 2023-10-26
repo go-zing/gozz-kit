@@ -207,7 +207,7 @@ func (p *schemaParser) parseParams(api *zapi.HttpApi, binding Binding) (params [
 				cp[k] = v
 			}
 			parseElements(cp, cp[api.Request], tag, func(element zapi.PayloadElement, values zapi.TagValues) {
-				if _, exist := added[values[0]]; !exist && len(values[0]) > 0 {
+				if len(values[0]) > 0 {
 					fn(element, values)
 				}
 			})

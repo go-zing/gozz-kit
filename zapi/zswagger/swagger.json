@@ -303,7 +303,8 @@
                     "type": "string",
                     "format": "base64",
                     "title": "bytes field",
-                    "x-order": "14"
+                    "x-order": "14",
+                    "example": null
                 },
                 "string3": {
                     "type": "string",

@@ -352,7 +352,8 @@ func parseIntegerKind(kind string) (typ, format string, max, min float64) {
 	} else {
 		format += strconv.Itoa(size)
 	}
-	return "integer", format, float64(uintptr(1<<unsigned)<<(size-1) - 1), max * float64(unsigned-1)
+	max = float64(uintptr(1<<unsigned)<<(size-1) - 1)
+	return "integer", format, max, max * float64(unsigned-1)
 }
 
 func parseBasicKind(k reflect.Kind) (typ, format string, max, min float64) {

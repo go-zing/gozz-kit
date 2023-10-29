@@ -17,6 +17,7 @@ type (
 		Resource string
 		Options  map[string]string
 		Invoke   InvokeFunc
+		Func     interface{}
 		Request  reflect.Type
 		Response reflect.Type
 	}
@@ -91,12 +92,13 @@ func SplitFn(sep string) func(resource string) (method, path string) {
 	}
 }
 
-func (p *Parser) parseApi(rt reflect.Type, spec map[string]interface{}) (api Api) {
+func (p *Parser) parseApi(rv reflect.Value, rt reflect.Type, spec map[string]interface{}) (api Api) {
 	api.Name, _ = spec["name"].(string)
 	fm, ok := rt.MethodByName(api.Name)
 	if !ok {
 		return
 	}
+	api.Func = rv.MethodByName(api.Name)
 	api.Doc = p.getFieldDoc(rt, api.Name)
 	api.Request, api.Response = p.parseFuncPayload(fm.Type)
 	api.Resource, _ = spec["resource"].(string)
@@ -107,6 +109,7 @@ func (p *Parser) parseApi(rt reflect.Type, spec map[string]interface{}) (api Api
 
 func (p *Parser) parseApiGroup(handler interface{}, specs []map[string]interface{}) ApiGroup {
 	rt := helpers.IndirectType(reflect.TypeOf(handler))
+	rv := reflect.Indirect(reflect.ValueOf(handler))
 	group := ApiGroup{
 		Handler: handler,
 		Package: rt.PkgPath(),
@@ -115,7 +118,7 @@ func (p *Parser) parseApiGroup(handler interface{}, specs []map[string]interface
 		Apis:    make([]Api, 0, len(specs)),
 	}
 	for _, spec := range specs {
-		if api := p.parseApi(rt, spec); len(api.Name) > 0 {
+		if api := p.parseApi(rv, rt, spec); len(api.Name) > 0 {
 			group.Apis = append(group.Apis, api)
 		}
 	}

@@ -17,9 +17,10 @@ type (
 		Resource string
 		Options  map[string]string
 		Invoke   InvokeFunc
-		Func     interface{}
 		Request  reflect.Type
 		Response reflect.Type
+
+		function func() interface{}
 	}
 
 	ApiGroup struct {
@@ -75,6 +76,10 @@ func (group ApiGroup) Fullname() string {
 	return ""
 }
 
+func (api *Api) Func() interface{} {
+	return api.function()
+}
+
 func (typ PayloadType) Fullname() string {
 	if len(typ.Package) > 0 {
 		return typ.Package + "." + typ.Name
@@ -98,7 +103,7 @@ func (p *Parser) parseApi(rv reflect.Value, rt reflect.Type, spec map[string]int
 	if !ok {
 		return
 	}
-	api.Func = rv.MethodByName(api.Name)
+	api.function = func() interface{} { return rv.MethodByName(api.Name) }
 	api.Doc = p.getFieldDoc(rt, api.Name)
 	api.Request, api.Response = p.parseFuncPayload(fm.Type)
 	api.Resource, _ = spec["resource"].(string)

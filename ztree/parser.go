@@ -2,9 +2,11 @@ package ztree
 
 import (
 	"fmt"
+	"os/exec"
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"unsafe"
 
 	"github.com/go-zing/gozz-kit/internal/helpers"
@@ -99,7 +101,12 @@ func setupParser(v interface{}, opts ...func(*Option)) *parser {
 		if p.expandPkg == nil {
 			p.expandPkg = make(map[string]bool)
 		}
-		p.expandPkg[rt.PkgPath()] = true
+		stdout, _ := exec.Command("go", "list", "-m").Output()
+		if len(stdout) > 0 {
+			p.expandPkg[string(stdout)] = true
+		} else {
+			p.expandPkg[rt.PkgPath()] = true
+		}
 	}
 
 	for _, iv := range append(p.Option.ExpandTypes, v) {
@@ -208,7 +215,14 @@ func getUnexportedField(field reflect.Value) reflect.Value {
 	return reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
 }
 
-func (p *parser) isExpand(rt reflect.Type) bool { return p.expandType[rt] || p.expandPkg[rt.PkgPath()] }
+func (p *parser) isExpand(rt reflect.Type) bool {
+	for path := range p.expandPkg {
+		if strings.HasSuffix(rt.PkgPath(), path) {
+			return true
+		}
+	}
+	return p.expandType[rt]
+}
 
 func (p *parser) ParseValues(rv reflect.Value, exported bool) (id string) {
 	for rv.Kind() == reflect.Ptr && !rv.IsNil() {

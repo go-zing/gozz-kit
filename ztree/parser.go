@@ -218,7 +218,7 @@ func getUnexportedField(field reflect.Value) reflect.Value {
 func (p *parser) isExpand(rt reflect.Type) bool {
 	rt = helpers.IndirectType(rt)
 	for path := range p.expandPkg {
-		if strings.HasSuffix(rt.PkgPath(), path) {
+		if strings.HasPrefix(rt.PkgPath(), path) {
 			return true
 		}
 	}

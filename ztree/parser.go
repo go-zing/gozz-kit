@@ -102,8 +102,8 @@ func setupParser(v interface{}, opts ...func(*Option)) *parser {
 			p.expandPkg = make(map[string]bool)
 		}
 		stdout, _ := exec.Command("go", "list", "-m").Output()
-		if len(stdout) > 0 {
-			p.expandPkg[string(stdout)] = true
+		if pkg := strings.TrimSpace(string(stdout)); len(pkg) > 0 {
+			p.expandPkg[pkg] = true
 		} else {
 			p.expandPkg[rt.PkgPath()] = true
 		}

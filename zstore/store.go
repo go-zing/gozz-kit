@@ -36,30 +36,34 @@ func WithCache(ctx context.Context, key string, fn LoadFn, cache Store, dst inte
 }
 
 func (l *CacheLoader) Load(ctx context.Context, key string, fn LoadFn, cache Store, dst interface{}) (err error) {
-	if value, ok := l.m.Load(key); ok {
-		return l.Unmarshal(value.([]byte), dst)
+	if data, _ := l.m.Load(key); data != nil {
+		return l.Unmarshal(data.([]byte), dst)
 	}
 
 	var caching chan error
 
-	retChan := l.f.DoChan(key, func() (_ interface{}, err error) {
-		v, _ := l.m.Load(key)
-		data, ok := v.([]byte)
-		if ok {
-			return data, nil
-		} else if data, err = cache.Get(ctx, key); err == nil && len(data) > 0 {
-			return data, nil
+	retChan := l.f.DoChan(key, func() (data interface{}, err error) {
+		if data, _ = l.m.Load(key); data != nil {
+			return
+		} else if data, err = cache.Get(ctx, key); err == nil && len(data.([]byte)) > 0 {
+			return
 		}
+
 		v, exp, err := fn()
 		if err != nil {
-			return nil, err
+			return
 		} else if data, err = l.Marshal(v); err != nil {
-			return nil, err
+			return
 		}
+
 		l.m.Store(key, data)
 		caching = make(chan error, 1)
-		go func() { defer l.m.Delete(key); caching <- cache.Set(ctx, key, data, exp); close(caching) }()
-		return data, nil
+		go func() {
+			defer l.m.Delete(key)
+			caching <- cache.Set(ctx, key, data.([]byte), exp)
+			close(caching)
+		}()
+		return
 	})
 
 	select {

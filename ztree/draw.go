@@ -199,7 +199,7 @@ func (d *drawer) writeGraph(graph, name string, fn func()) {
 func (d *drawer) Draw(name string) []byte {
 	patch := make(map[string]mergeElements)
 	types := d.Tree.typesMap()
-	d.writeGraph("digraph", name, func() {
+	d.writeGraph("digraph", strings.Replace(name, "-", "_", -1), func() {
 		for _, str := range []string{"node", "edge", "graph"} {
 			d.writeNode(str, graphProperties[str])
 		}

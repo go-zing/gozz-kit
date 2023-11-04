@@ -116,7 +116,7 @@ func (p *Parser) parseApiGroup(handler interface{}, specs []map[string]interface
 	rt := helpers.IndirectType(reflect.TypeOf(handler))
 	rv := reflect.Indirect(reflect.ValueOf(handler))
 	group := ApiGroup{
-		Handler: handler,
+		Handler: rv.Interface(),
 		Package: rt.PkgPath(),
 		Name:    rt.Name(),
 		Doc:     p.getFieldDoc(rt, ""),

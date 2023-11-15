@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-zing/gozz-kit/internal/helpers"
+	"github.com/go-zing/gozz-kit/zreflect"
 )
 
 type (
@@ -56,7 +57,7 @@ type (
 		Flag int
 		Name string
 		Doc  string
-		Tags StructTags
+		Tags zreflect.StructTags
 	}
 )
 

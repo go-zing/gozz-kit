@@ -10,7 +10,7 @@ import (
 type contextKey int
 
 const (
-	contextKeyTxOption = iota + 1
+	contextKeyTxOption contextKey = iota + 1
 )
 
 //go:generate gozz run -p "option" ./

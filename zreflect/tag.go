@@ -32,8 +32,8 @@ func (tags StructTags) Get(key string) (value TagValue) {
 	return
 }
 
-func (value TagValue) Split(Sep string) TagValues {
-	return strings.Split(string(value), Sep)
+func (value TagValue) Split(sep string) TagValues {
+	return strings.Split(string(value), sep)
 }
 
 func (values TagValues) Exist(option string) bool {

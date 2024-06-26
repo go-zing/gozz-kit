@@ -2,6 +2,7 @@ package zswagger
 
 import (
 	"encoding/json"
+	"github.com/go-zing/gozz-kit/zreflect"
 	"net"
 	"net/http"
 	"net/url"
@@ -87,7 +88,7 @@ func parseBinding(api *zapi.HttpApi, rules map[string]Binding) Binding {
 	return rule
 }
 
-func parseElements(payloads map[reflect.Type]*zapi.PayloadType, root *zapi.PayloadType, tag string, fn func(zapi.PayloadElement, zapi.TagValues)) {
+func parseElements(payloads map[reflect.Type]*zapi.PayloadType, root *zapi.PayloadType, tag string, fn func(zapi.PayloadElement, zreflect.TagValues)) {
 	if len(tag) == 0 {
 		return
 	}
@@ -201,20 +202,20 @@ func (p *schemaParser) parseParams(api *zapi.HttpApi, binding Binding) (params [
 	}
 
 	if api.Request != nil && api.Request.Kind() == reflect.Struct {
-		parsePayload := func(tag string, fn func(element zapi.PayloadElement, values zapi.TagValues)) {
+		parsePayload := func(tag string, fn func(element zapi.PayloadElement, values zreflect.TagValues)) {
 			cp := make(map[reflect.Type]*zapi.PayloadType, len(p.payloads))
 			for k, v := range p.payloads {
 				cp[k] = v
 			}
-			parseElements(cp, cp[api.Request], tag, func(element zapi.PayloadElement, values zapi.TagValues) {
+			parseElements(cp, cp[api.Request], tag, func(element zapi.PayloadElement, values zreflect.TagValues) {
 				if len(values[0]) > 0 {
 					fn(element, values)
 				}
 			})
 		}
 
-		newWith := func(in string) func(element zapi.PayloadElement, values zapi.TagValues) {
-			return func(element zapi.PayloadElement, values zapi.TagValues) {
+		newWith := func(in string) func(element zapi.PayloadElement, values zreflect.TagValues) {
+			return func(element zapi.PayloadElement, values zreflect.TagValues) {
 				param := &spec.Parameter{ParamProps: spec.ParamProps{Name: values[0], In: in}}
 				param.Description = element.Doc
 				param.Typed(parseBasicKind(element.Type.Kind()))
@@ -222,7 +223,7 @@ func (p *schemaParser) parseParams(api *zapi.HttpApi, binding Binding) (params [
 			}
 		}
 
-		parsePayload(binding.Path, func(element zapi.PayloadElement, values zapi.TagValues) {
+		parsePayload(binding.Path, func(element zapi.PayloadElement, values zreflect.TagValues) {
 			if index, ok := added[values[0]]; ok {
 				param := &params[index]
 				param.Description = element.Doc

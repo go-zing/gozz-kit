@@ -26,4 +26,13 @@ type (
 		Conn
 		driver.Tx
 	}
+
+	Orm interface {
+		Conn
+		Select(ctx context.Context, model Model, fields []string, ext ...interface{}) (err error)
+		Selects(ctx context.Context, models ModelIterator, fields []string, ext ...interface{}) (err error)
+		Insert(ctx context.Context, ignore bool, model Model, fields []string, ext ...interface{}) (result sql.Result, err error)
+		Inserts(ctx context.Context, ignore bool, models ModelIterator, fields []string, ext ...interface{}) (result sql.Result, err error)
+		Update(ctx context.Context, model Model, fields []string, condition string, args ...interface{}) (result sql.Result, err error)
+	}
 )

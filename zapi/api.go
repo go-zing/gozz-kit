@@ -104,7 +104,7 @@ func (p *Parser) parseApi(rv reflect.Value, rt reflect.Type, spec map[string]int
 	if !ok {
 		return
 	}
-	api.function = func() interface{} { return rv.MethodByName(api.Name) }
+	api.function = func() interface{} { return rv.MethodByName(api.Name).Interface() }
 	api.Doc = p.getFieldDoc(rt, api.Name)
 	api.Request, api.Response = p.parseFuncPayload(fm.Type)
 	api.Resource, _ = spec["resource"].(string)

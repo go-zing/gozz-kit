@@ -245,12 +245,28 @@ func (p *schemaParser) parseParams(api *zapi.HttpApi, binding Binding) (params [
 
 func (p *schemaParser) Parse(typ *zapi.PayloadType) (schema spec.Schema) {
 	if cached, ok := p.visited[typ.Type]; ok {
+		// If we have a cached result, check if it's a complete schema or just a placeholder
+		if cached.Ref.String() != "" {
+			// This is a reference to a schema that's being parsed
+			return cached
+		}
 		return cached
 	}
 	name := escape(typ.Fullname())
 	if _, ok := p.definitions[name]; ok {
 		return refSchema(name)
 	}
+
+	// For named types, we can create a placeholder reference
+	if len(typ.Package) > 0 && !helpers.IsGoStandardPackage(typ.Package) {
+		placeholder := refSchema(name)
+		p.visited[typ.Type] = placeholder
+		schema = p.parseTypeSchema(typ)
+		p.visited[typ.Type] = schema
+		return
+	}
+
+	// For inline types, parse directly (but still cache the result)
 	schema = p.parseTypeSchema(typ)
 	p.visited[typ.Type] = schema
 	return

@@ -351,7 +351,13 @@ func (p *schemaParser) parseTypeSchema(typ *zapi.PayloadType) (schema spec.Schem
 	}
 
 	schema.Title, schema.Description = zdoc.Split(typ.Doc)
-	schema.Example = typ.Entity
+	// Only set example if it's serializable (avoid functions and other non-serializable types)
+	if typ.Entity != nil {
+		// Try to marshal the entity to check if it's serializable
+		if _, err := json.Marshal(typ.Entity); err == nil {
+			schema.Example = typ.Entity
+		}
+	}
 
 	if define, ok := defined[typ.Type]; ok {
 		if define(&schema); len(schema.Type) > 0 {

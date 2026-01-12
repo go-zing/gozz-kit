@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"testing"
 
+	"github.com/go-openapi/spec"
 	"github.com/go-zing/gozz-kit/internal/ztest"
 	"github.com/go-zing/gozz-kit/zapi/zswagger"
 	"github.com/go-zing/gozz-kit/zdoc"
@@ -27,9 +28,18 @@ func TestParse(t *testing.T) {
 			},
 		}),
 	)
+
+	// Test JSON marshaling
 	b, err := json.MarshalIndent(swagger, "", "    ")
 	if err != nil {
 		t.Fatalf("JSON marshaling failed: %v", err)
 	}
+
+	// Verify the JSON can be unmarshaled back
+	var unmarshaled spec.Swagger
+	if err := json.Unmarshal(b, &unmarshaled); err != nil {
+		t.Fatalf("JSON unmarshaling failed: %v", err)
+	}
+
 	_ = ioutil.WriteFile("example.json", b, 0o664)
 }

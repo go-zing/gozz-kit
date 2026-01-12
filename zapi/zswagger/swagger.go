@@ -50,6 +50,7 @@ type (
 		payloads    map[reflect.Type]*zapi.PayloadType
 		definitions spec.Definitions
 		visited     map[reflect.Type]spec.Schema
+		parsing     map[reflect.Type]bool // Track types currently being parsed
 	}
 
 	// +zz:option
@@ -140,7 +141,13 @@ func Parse(iterator zapi.Iterator, option ...func(*Option)) (swagger *spec.Swagg
 		},
 	}
 
-	parser := &schemaParser{definitions: swagger.Definitions, payloads: payloads, option: opt, visited: make(map[reflect.Type]spec.Schema)}
+	parser := &schemaParser{
+		definitions: swagger.Definitions,
+		payloads:    payloads,
+		option:      opt,
+		visited:     make(map[reflect.Type]spec.Schema),
+		parsing:     make(map[reflect.Type]bool),
+	}
 
 	for _, group := range groups {
 		swagger.Tags = append(swagger.Tags, spec.NewTag(group.Fullname(), group.Doc, nil))
@@ -252,20 +259,23 @@ func (p *schemaParser) Parse(typ *zapi.PayloadType) (schema spec.Schema) {
 		return refSchema(name)
 	}
 
-	// Mark this type as being parsed to prevent infinite recursion
-	// For named types, use a reference placeholder; for inline types, use an empty schema
-	var placeholder spec.Schema
-	if len(typ.Package) > 0 && !helpers.IsGoStandardPackage(typ.Package) {
-		placeholder = refSchema(name)
-	} else {
-		// For inline types, create an empty schema as placeholder
-		placeholder = spec.Schema{SchemaProps: spec.SchemaProps{Type: []string{"object"}}}
+	// Check if this type is currently being parsed (circular reference)
+	if p.parsing[typ.Type] {
+		// Return a reference to break the cycle
+		if len(typ.Package) > 0 && !helpers.IsGoStandardPackage(typ.Package) {
+			return refSchema(name)
+		}
+		// For inline types, return an empty object schema
+		return spec.Schema{SchemaProps: spec.SchemaProps{Type: []string{"object"}}}
 	}
-	p.visited[typ.Type] = placeholder
+
+	// Mark this type as currently being parsed
+	p.parsing[typ.Type] = true
 
 	schema = p.parseTypeSchema(typ)
 
-	// Update the visited map with the complete schema
+	// Mark parsing as complete and cache the result
+	delete(p.parsing, typ.Type)
 	p.visited[typ.Type] = schema
 	return
 }

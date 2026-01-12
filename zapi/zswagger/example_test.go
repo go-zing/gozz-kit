@@ -29,7 +29,7 @@ func TestParse(t *testing.T) {
 	)
 	b, err := json.MarshalIndent(swagger, "", "    ")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("JSON marshaling failed: %v", err)
 	}
 	_ = ioutil.WriteFile("example.json", b, 0o664)
 }

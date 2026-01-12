@@ -1,0 +1,323 @@
+# ZSwagger
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/go-zing/gozz-kit/zapi/zswagger.svg)](https://pkg.go.dev/github.com/go-zing/gozz-kit/zapi/zswagger)
+
+从 Go 接口和结构体生成 [Swagger 2.0](https://swagger.io/specification/v2/) OpenAPI 文档。
+
+ZSwagger 是 [gozz-kit](https://github.com/go-zing/gozz-kit) 生态系统的一部分，与 gozz 代码生成工具无缝协作，自动创建全面的 API 文档。
+
+## 特性
+
+- 🚀 **自动生成**：解析 Go 接口和结构体以生成 OpenAPI 规范
+- 🔄 **递归类型支持**：安全处理复杂的嵌套和递归数据结构
+- 📝 **文档提取**：从 Go 注释中提取文档
+- 🎯 **灵活的参数绑定**：可配置的结构体字段到路径、查询、头部和主体参数的映射
+- 🏗️ **类型安全**：完全类型感知的模式生成，具有适当的验证
+- ⚡ **性能优化**：记忆化解析防止冗余工作，确保快速生成
+
+## 安装
+
+```bash
+go get github.com/go-zing/gozz-kit/zapi/zswagger
+```
+
+## 快速开始
+
+### 1. 定义您的 API 接口
+
+```go
+package api
+
+import "context"
+
+//go:generate gozz run -p "doc" -p "api" ./
+
+// +zz:api:./
+// 用户管理 API
+type UserService interface {
+    // +zz:api:get|/users
+    // 获取所有用户
+    ListUsers(ctx context.Context) ([]User, error)
+
+    // +zz:api:get|/users/{id}
+    // 根据 ID 获取用户
+    GetUser(ctx context.Context, id int64) (User, error)
+
+    // +zz:api:post|/users
+    // 创建新用户
+    CreateUser(ctx context.Context, req CreateUserRequest) (User, error)
+}
+
+type User struct {
+    ID       int64  `json:"id"`
+    Name     string `json:"name"`
+    Email    string `json:"email"`
+    CreatedAt time.Time `json:"created_at"`
+}
+
+type CreateUserRequest struct {
+    Name  string `json:"name" validate:"required"`
+    Email string `json:"email" validate:"required,email"`
+}
+```
+
+### 2. 生成文档
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "os"
+
+    "github.com/go-zing/gozz-kit/zapi/zswagger"
+    "github.com/go-zing/gozz-kit/zdoc"
+)
+
+func main() {
+    swagger := zswagger.Parse(
+        api.UserService{},
+        zswagger.WithDocFunc(zdoc.TypesDoc(api.ZZ_types_doc).TypeFieldDoc),
+    )
+
+    // 写入文件
+    data, _ := json.MarshalIndent(swagger, "", "  ")
+    os.WriteFile("swagger.json", data, 0644)
+}
+```
+
+## 配置选项
+
+### 参数绑定
+
+控制结构体字段如何映射到 OpenAPI 参数：
+
+```go
+swagger := zswagger.Parse(
+    api.UserService{},
+    zswagger.WithBindings(map[string]zswagger.Binding{
+        "GET": {
+            Path:   "uri",    // 带有 "uri" 标签的字段进入路径参数
+            Query:  "form",   // 带有 "form" 标签的字段进入查询参数
+            Header: "",       // 无头部参数
+            Body:   false,    // 不使用请求主体
+        },
+        "POST": {
+            Path:   "uri",
+            Query:  "",
+            Header: "",
+            Body:   true,     // 使用整个结构体作为请求主体
+        },
+    }),
+)
+```
+
+### 自定义 HTTP 映射
+
+如果您的 API 定义不遵循默认的 `METHOD|PATH` 格式：
+
+```go
+swagger := zswagger.Parse(
+    api.UserService{},
+    zswagger.WithHttpCast(func(api zapi.Api) zapi.HttpApi {
+        // 自定义逻辑将 API 转换为 HTTP API
+        parts := strings.Split(api.Resource, "|")
+        return zapi.HttpApi{
+            Api:    api,
+            Method: parts[0],
+            Path:   parts[1],
+        }
+    }),
+)
+```
+
+### 文档函数
+
+自定义文档提取方式：
+
+```go
+swagger := zswagger.Parse(
+    api.UserService{},
+    zswagger.WithDocFunc(func(typ reflect.Type, fieldName string) string {
+        // 自定义文档提取逻辑
+        return getCustomDoc(typ, fieldName)
+    }),
+)
+```
+
+## 支持的类型
+
+ZSwagger 自动为以下类型生成模式：
+
+- **基本类型**：`string`、`int`、`int64`、`uint`、`float`、`bool`
+- **时间类型**：`time.Time` → 带有 `date-time` 格式的 `string`
+- **网络类型**：`net.IP` → 带有 `ipv4` 格式的 `string`，`url.URL` → 带有 `uri` 格式的 `string`
+- **二进制数据**：`[]byte` → 带有 `base64` 格式的 `string`
+- **JSON 数据**：`json.RawMessage` → `object`
+- **复杂类型**：结构体、映射、切片、数组
+- **指针**：正确处理可选字段
+- **嵌入结构体**：展平嵌入字段
+- **递归类型**：安全处理循环引用
+
+## 自定义类型注册
+
+为特定类型注册自定义模式生成器：
+
+```go
+// 注册自定义类型
+zswagger.RegisterSchemaType(reflect.TypeOf(MyCustomType{}), func(schema *spec.Schema) {
+    schema.Typed("string", "custom-format")
+})
+```
+
+## 生成输出
+
+生成的 Swagger 规范包括：
+
+- **路径**：带有方法、参数和响应的 API 端点
+- **定义**：所有类型的模式定义
+- **标签**：组织的 API 组
+- **信息**：基本 API 信息
+
+生成的规范示例：
+
+```json
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "api.UserService",
+    "version": "unknown",
+    "description": "This file is generated by gozz-kit-zswagger"
+  },
+  "paths": {
+    "/users": {
+      "get": {
+        "operationId": "api.UserService.ListUsers",
+        "responses": {
+          "200": {
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/api.User"
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "api.UserService.CreateUser",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/api.CreateUserRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "schema": {
+              "$ref": "#/definitions/api.User"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "api.User": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "integer", "format": "int64"},
+        "name": {"type": "string"},
+        "email": {"type": "string"}
+      }
+    }
+  }
+}
+```
+
+## API 参考
+
+### 函数
+
+#### `Parse(iterator zapi.Iterator, options ...func(*Option)) *spec.Swagger`
+
+解析 API 迭代器并生成 Swagger 规范。
+
+**参数：**
+- `iterator`：API 迭代器（通常是实现 zapi.Iterator 的结构体）
+- `options`：可选的配置函数
+
+**返回：** `*spec.Swagger` - 生成的 OpenAPI 规范
+
+#### `RegisterSchemaType(typ reflect.Type, fn func(*spec.Schema))`
+
+为特定的 Go 类型注册自定义模式生成器。
+
+**参数：**
+- `typ`：要注册的 reflect.Type
+- `fn`：配置模式的函数
+
+### 类型
+
+#### `Option`
+
+解析的配置选项。
+
+```go
+type Option struct {
+    HttpCast func(api zapi.Api) zapi.HttpApi  // 自定义 HTTP 映射
+    Bindings map[string]Binding               // 参数绑定规则
+    DocFunc  func(reflect.Type, string) string // 文档提取
+}
+```
+
+#### `Binding`
+
+HTTP 方法的参数绑定配置。
+
+```go
+type Binding struct {
+    Path   string  // 路径参数的结构体标签（例如 "uri"）
+    Query  string  // 查询参数的结构体标签（例如 "form"）
+    Header string  // 头部参数的结构体标签
+    Body   bool    // 是否使用整个结构体作为请求主体
+}
+```
+
+### 选项函数
+
+#### `WithHttpCast(fn func(api zapi.Api) zapi.HttpApi) func(*Option)`
+
+设置自定义 HTTP API 映射函数。
+
+#### `WithBindings(bindings map[string]Binding) func(*Option)`
+
+设置不同 HTTP 方法的参数绑定规则。
+
+#### `WithDocFunc(fn func(reflect.Type, string) string) func(*Option)`
+
+设置自定义文档提取函数。
+
+## 与 Gozz 集成
+
+ZSwagger 与 [gozz](https://github.com/go-zing/gozz) 代码生成工具配合最佳：
+
+1. 使用 `+zz:api:` 注释标注您的接口
+2. 运行 `gozz run -p "api" -p "doc" ./` 生成 API 元数据
+3. 使用 ZSwagger 生成 OpenAPI 文档
+
+## 示例
+
+查看 [example_test.go](example_test.go) 和 [example.json](example.json) 文件，了解包含复杂类型、递归结构和各种参数绑定的完整工作示例。
+
+## 贡献
+
+欢迎贡献！请查看主要的 [gozz-kit 仓库](https://github.com/go-zing/gozz-kit) 以获取贡献指南。
+
+## 许可证
+
+此项目的许可证与 gozz-kit 相同。</content>
+<parameter name="filePath">/Users/xp/Desktop/gozz-kit/zapi/zswagger/README_zh.md

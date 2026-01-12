@@ -49,6 +49,7 @@ type (
 		option      Option
 		payloads    map[reflect.Type]*zapi.PayloadType
 		definitions spec.Definitions
+		visited     map[reflect.Type]spec.Schema
 	}
 
 	// +zz:option
@@ -139,7 +140,7 @@ func Parse(iterator zapi.Iterator, option ...func(*Option)) (swagger *spec.Swagg
 		},
 	}
 
-	parser := &schemaParser{definitions: swagger.Definitions, payloads: payloads, option: opt}
+	parser := &schemaParser{definitions: swagger.Definitions, payloads: payloads, option: opt, visited: make(map[reflect.Type]spec.Schema)}
 
 	for _, group := range groups {
 		swagger.Tags = append(swagger.Tags, spec.NewTag(group.Fullname(), group.Doc, nil))
@@ -243,11 +244,16 @@ func (p *schemaParser) parseParams(api *zapi.HttpApi, binding Binding) (params [
 }
 
 func (p *schemaParser) Parse(typ *zapi.PayloadType) (schema spec.Schema) {
+	if cached, ok := p.visited[typ.Type]; ok {
+		return cached
+	}
 	name := escape(typ.Fullname())
 	if _, ok := p.definitions[name]; ok {
 		return refSchema(name)
 	}
-	return p.parseTypeSchema(typ)
+	schema = p.parseTypeSchema(typ)
+	p.visited[typ.Type] = schema
+	return
 }
 
 func (p *schemaParser) parseEmbedProperties(ele zapi.PayloadElement, schema *spec.Schema) {
